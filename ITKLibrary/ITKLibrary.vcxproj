@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{51375716-58db-469f-ba4e-87ec05c68c2f}</ProjectGuid>
+    <RootNamespace>ITKLibrary</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;ITKLIBRARY_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>C:\opencv-4.7.0\build\bin_1\include;C:\InsightToolkit-5.3rc04\build\bin_1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableUAC>false</EnableUAC>
+      <AdditionalLibraryDirectories>C:\opencv-4.7.0\build\bin_1\win64\lib;C:\InsightToolkit-5.3rc04\build\bin_1\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>hdf5_hl_cpp-shared.lib;hdf5_hl-shared.lib;ITKBiasCorrection-5.3.lib;ITKColormap-5.3.lib;ITKCommon-5.3.lib;ITKConvolution-5.3.lib;ITKDeformableMesh-5.3.lib;ITKDenoising-5.3.lib;ITKDICOMParser-5.3.lib;ITKDiffusionTensorImage-5.3.lib;itkdouble-conversion-5.3.lib;ITKEXPAT-5.3.lib;ITKFastMarching-5.3.lib;ITKFFT-5.3.lib;itkgdcmcharls-5.3.lib;itkgdcmCommon-5.3.lib;itkgdcmDICT-5.3.lib;itkgdcmDSED-5.3.lib;itkgdcmIOD-5.3.lib;itkgdcmjpeg8-5.3.lib;itkgdcmjpeg12-5.3.lib;itkgdcmjpeg16-5.3.lib;itkgdcmMEXD-5.3.lib;itkgdcmMSFF-5.3.lib;itkgdcmopenjp2-5.3.lib;itkgdcmsocketxx-5.3.lib;ITKgiftiio-5.3.lib;itkhdf5_cpp-shared-5.3.lib;itkhdf5-shared-5.3.lib;ITKImageFeature-5.3.lib;ITKImageIntensity-5.3.lib;ITKIOBioRad-5.3.lib;ITKIOBMP-5.3.lib;ITKIOBruker-5.3.lib;ITKIOCSV-5.3.lib;ITKIOGDCM-5.3.lib;ITKIOGE-5.3.lib;ITKIOGIPL-5.3.lib;ITKIOHDF5-5.3.lib;ITKIOImageBase-5.3.lib;ITKIOIPL-5.3.lib;ITKIOJPEG-5.3.lib;ITKIOJPEG2000-5.3.lib;ITKIOLSM-5.3.lib;ITKIOMeshBase-5.3.lib;ITKIOMeshBYU-5.3.lib;ITKIOMeshFreeSurfer-5.3.lib;ITKIOMeshGifti-5.3.lib;ITKIOMeshOBJ-5.3.lib;ITKIOMeshOFF-5.3.lib;ITKIOMeshVTK-5.3.lib;ITKIOMeta-5.3.lib;ITKIOMINC-5.3.lib;ITKIOMRC-5.3.lib;ITKIONIFTI-5.3.lib;ITKIONRRD-5.3.lib;ITKIOPNG-5.3.lib;ITKIOSiemens-5.3.lib;ITKIOSpatialObjects-5.3.lib;ITKIOStimulate-5.3.lib;ITKIOTIFF-5.3.lib;ITKIOTransformBase-5.3.lib;ITKIOTransformHDF5-5.3.lib;ITKIOTransformInsightLegacy-5.3.lib;ITKIOTransformMatlab-5.3.lib;ITKIOVTK-5.3.lib;ITKIOXML-5.3.lib;itkjpeg-5.3.lib;ITKKLMRegionGrowing-5.3.lib;ITKLabelMap-5.3.lib;itklbfgs-5.3.lib;ITKMarkovRandomFieldsClassifiers-5.3.lib;ITKMathematicalMorphology-5.3.lib;ITKMesh-5.3.lib;ITKMetaIO-5.3.lib;itkminc2-5.3.lib;itkNetlibSlatec-5.3.lib;ITKniftiio-5.3.lib;ITKNrrdIO-5.3.lib;itkopenjpeg-5.3.lib;ITKOptimizers-5.3.lib;ITKOptimizersv4-5.3.lib;ITKPath-5.3.lib;ITKPDEDeformableRegistration-5.3.lib;itkpng-5.3.lib;ITKPolynomials-5.3.lib;ITKQuadEdgeMesh-5.3.lib;ITKQuadEdgeMeshFiltering-5.3.lib;ITKRegionGrowing-5.3.lib;ITKRegistrationMethodsv4-5.3.lib;ITKSmoothing-5.3.lib;ITKSpatialObjects-5.3.lib;ITKStatistics-5.3.lib;itksys-5.3.lib;ITKTestKernel-5.3.lib;itktestlib-5.3.lib;itktiff-5.3.lib;ITKTransform-5.3.lib;ITKTransformFactory-5.3.lib;itkv3p_netlib-5.3.lib;itkvcl-5.3.lib;ITKVideoCore-5.3.lib;ITKVideoIO-5.3.lib;itkvnl_algo-5.3.lib;itkvnl-5.3.lib;ITKVNLInstantiation-5.3.lib;ITKVTK-5.3.lib;ITKVtkGlue-5.3.lib;ITKWatersheds-5.3.lib;itkzlib-5.3.lib;ITKznz-5.3.lib;opencv_calib3d470.lib;opencv_core470.lib;opencv_dnn470.lib;opencv_features2d470.lib;opencv_flann470.lib;opencv_gapi470.lib;opencv_highgui470.lib;opencv_imgcodecs470.lib;opencv_imgproc470.lib;opencv_ml470.lib;opencv_objdetect470.lib;opencv_photo470.lib;opencv_stitching470.lib;opencv_ts470.lib;opencv_video470.lib;opencv_videoio470.lib;opencv_world470.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;ITKLIBRARY_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableUAC>false</EnableUAC>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;ITKLIBRARY_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableUAC>false</EnableUAC>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;ITKLIBRARY_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>D:\LIBS\install\DCMTK\bin_1\include;D:\LIBS\install\opencv-4.7.0\bin_1\include;D:\LIBS\install\ITK-master\bin_1\include\ITK-5.4;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableUAC>false</EnableUAC>
+      <AdditionalLibraryDirectories>D:\LIBS\install\DCMTK\bin_1\lib;D:\LIBS\install\opencv-4.7.0\bin_1\x64\vc15\lib;D:\LIBS\install\ITK-master\bin_1\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>hdf5_hl_cpp-shared.lib;hdf5_hl_cpp-shared_D.lib;ITKBiasCorrection-5.4.lib;ITKColormap-5.4.lib;ITKCommon-5.4.lib;ITKConvolution-5.4.lib;ITKDeformableMesh-5.4.lib;ITKDenoising-5.4.lib;ITKDICOMParser-5.4.lib;ITKDiffusionTensorImage-5.4.lib;itkdouble-conversion-5.4.lib;ITKEXPAT-5.4.lib;ITKFastMarching-5.4.lib;ITKFFT-5.4.lib;itkgdcmcharls-5.4.lib;itkgdcmCommon-5.4.lib;itkgdcmDICT-5.4.lib;itkgdcmDSED-5.4.lib;itkgdcmIOD-5.4.lib;itkgdcmjpeg8-5.4.lib;itkgdcmjpeg12-5.4.lib;itkgdcmjpeg16-5.4.lib;itkgdcmMEXD-5.4.lib;itkgdcmMSFF-5.4.lib;itkgdcmopenjp2-5.4.lib;itkgdcmsocketxx-5.4.lib;ITKgiftiio-5.4.lib;itkhdf5_cpp-shared-5.4.lib;itkhdf5_cpp-shared-5.4_D.lib;itkhdf5_hl-shared-5.4.lib;itkhdf5_hl-shared-5.4_D.lib;itkhdf5-shared-5.4.lib;itkhdf5-shared-5.4_D.lib;ITKImageFeature-5.4.lib;ITKImageIntensity-5.4.lib;ITKIOBioRad-5.4.lib;ITKIOBMP-5.4.lib;ITKIOBruker-5.4.lib;ITKIOCSV-5.4.lib;ITKIODCMTK-5.4.lib;ITKIOGDCM-5.4.lib;ITKIOGE-5.4.lib;ITKIOGIPL-5.4.lib;ITKIOHDF5-5.4.lib;ITKIOImageBase-5.4.lib;ITKIOIPL-5.4.lib;ITKIOJPEG-5.4.lib;ITKIOJPEG2000-5.4.lib;ITKIOLSM-5.4.lib;ITKIOMeshBase-5.4.lib;ITKIOMeshBYU-5.4.lib;ITKIOMeshFreeSurfer-5.4.lib;ITKIOMeshGifti-5.4.lib;ITKIOMeshOBJ-5.4.lib;ITKIOMeshOFF-5.4.lib;itkIOMeshSTL-5.4.lib;ITKIOMeshVTK-5.4.lib;ITKIOMeta-5.4.lib;ITKIOMINC-5.4.lib;ITKIOMRC-5.4.lib;ITKIONIFTI-5.4.lib;ITKIONRRD-5.4.lib;ITKIOPNG-5.4.lib;ITKIOSiemens-5.4.lib;ITKIOSpatialObjects-5.4.lib;ITKIOStimulate-5.4.lib;ITKIOTIFF-5.4.lib;ITKIOTransformBase-5.4.lib;itkIOTransformDCMTK-5.4.lib;ITKIOTransformHDF5-5.4.lib;ITKIOTransformInsightLegacy-5.4.lib;ITKIOTransformMatlab-5.4.lib;ITKIOVTK-5.4.lib;ITKIOXML-5.4.lib;itkjpeg-5.4.lib;ITKKLMRegionGrowing-5.4.lib;ITKLabelMap-5.4.lib;itklbfgs-5.4.lib;ITKMarkovRandomFieldsClassifiers-5.4.lib;ITKMathematicalMorphology-5.4.lib;ITKMesh-5.4.lib;ITKMetaIO-5.4.lib;itkminc2-5.4.lib;itkNetlibSlatec-5.4.lib;ITKniftiio-5.4.lib;ITKNrrdIO-5.4.lib;itkopenjpeg-5.4.lib;ITKOptimizers-5.4.lib;ITKOptimizersv4-5.4.lib;ITKPath-5.4.lib;ITKPDEDeformableRegistration-5.4.lib;itkpng-5.4.lib;ITKPolynomials-5.4.lib;ITKQuadEdgeMesh-5.4.lib;ITKQuadEdgeMeshFiltering-5.4.lib;ITKRegionGrowing-5.4.lib;ITKRegistrationMethodsv4-5.4.lib;ITKSmoothing-5.4.lib;ITKSpatialObjects-5.4.lib;ITKStatistics-5.4.lib;itksys-5.4.lib;ITKTestKernel-5.4.lib;itktestlib-5.4.lib;itktiff-5.4.lib;ITKTransform-5.4.lib;ITKTransformFactory-5.4.lib;itkv3p_netlib-5.4.lib;itkvcl-5.4.lib;ITKVideoBridgeOpenCV-5.4.lib;ITKVideoCore-5.4.lib;ITKVideoIO-5.4.lib;itkvnl_algo-5.4.lib;itkvnl-5.4.lib;ITKVNLInstantiation-5.4.lib;ITKVTK-5.4.lib;ITKVtkGlue-5.4.lib;ITKWatersheds-5.4.lib;itkzlib-5.4.lib;ITKznz-5.4.lib;opencv_world470.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h" />
+    <ClInclude Include="pch.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="ITKReads.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
