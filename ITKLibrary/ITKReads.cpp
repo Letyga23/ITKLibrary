@@ -207,6 +207,64 @@ struct HDVolumeInfo
 	bool bIsSigned;
 };
 
+//extern "C" __declspec(dllexport)
+//bool ReadDicomSeriesToVolume(const char** series, int fileCount, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
+//{
+//	using PixelType = signed short;
+//	using ImageType = itk::Image<PixelType, 3>;
+//	using ReaderType = itk::ImageSeriesReader<ImageType>;
+//	using ImageIOType = itk::GDCMImageIO;
+//
+//	try
+//	{
+//		ReaderType::Pointer reader = ReaderType::New();
+//		ImageIOType::Pointer dicomIO = ImageIOType::New();
+//		reader->SetImageIO(dicomIO);
+//
+//		ReaderType::FileNamesContainer fileNames;
+//		fileNames.reserve(fileCount);
+//		for (int i = 0; i < fileCount; ++i)
+//		{
+//			fileNames.push_back(series[i]); // уже UTF-8, конвертация не нужна
+//		}
+//
+//		reader->SetFileNames(fileNames);
+//		reader->Update();
+//
+//		ImageType::Pointer image = reader->GetOutput();
+//		auto region = image->GetLargestPossibleRegion();
+//		auto size = region.GetSize();
+//		auto spacing = image->GetSpacing();
+//
+//		const size_t voxelCount = static_cast<size_t>(size[0]) * size[1] * size[2];
+//		const size_t totalBytes = voxelCount * sizeof(PixelType);
+//
+//		*outBuffer = new uint8_t[totalBytes];
+//		*outSize = totalBytes;
+//		memcpy(*outBuffer, image->GetBufferPointer(), totalBytes);
+//
+//		if (outInfo)
+//		{
+//			outInfo->DimX = static_cast<int>(size[0]);
+//			outInfo->DimY = static_cast<int>(size[1]);
+//			outInfo->DimZ = static_cast<int>(size[2]);
+//			outInfo->SpacingX = static_cast<float>(spacing[0]);
+//			outInfo->SpacingY = static_cast<float>(spacing[1]);
+//			outInfo->SpacingZ = static_cast<float>(spacing[2]);
+//			outInfo->BytesPerVoxel = sizeof(PixelType);
+//			outInfo->bIsSigned = true;
+//		}
+//
+//		return true;
+//	}
+//	catch (itk::ExceptionObject& e)
+//	{
+//		OutputDebugStringA(("ITK Exception: " + std::string(e.what()) + "\n").c_str());
+//		return false;
+//	}
+//}
+
+
 extern "C" __declspec(dllexport)
 bool ReadDicomSeriesToVolume(
 	const char** series,
@@ -223,15 +281,13 @@ bool ReadDicomSeriesToVolume(
 
 	try
 	{
-		// --- 1. Получаем папку ---
 		std::string firstFile = series[0];
 		size_t lastSlash = firstFile.find_last_of("/\\");
 		std::string folder = (lastSlash != std::string::npos) ? firstFile.substr(0, lastSlash) : firstFile;
 
-		// --- 2. Автоматически собираем и сортируем файлы по метаданным DICOM ---
 		NamesGeneratorType::Pointer nameGen = NamesGeneratorType::New();
 		nameGen->SetUseSeriesDetails(true);
-		nameGen->AddSeriesRestriction("0008|0021"); // Series Date
+		nameGen->AddSeriesRestriction("0008|0021");
 		nameGen->SetDirectory(folder);
 
 		const ReaderType::FileNamesContainer sortedNames = nameGen->GetInputFileNames();
@@ -242,14 +298,12 @@ bool ReadDicomSeriesToVolume(
 			return false;
 		}
 
-		// --- 3. Настраиваем чтение ---
 		ReaderType::Pointer reader = ReaderType::New();
 		ImageIOType::Pointer dicomIO = ImageIOType::New();
 		reader->SetImageIO(dicomIO);
 		reader->SetFileNames(sortedNames);
 		reader->Update();
 
-		// --- 4. Копируем данные ---
 		ImageType::Pointer image = reader->GetOutput();
 		auto region = image->GetLargestPossibleRegion();
 		auto size = region.GetSize();
