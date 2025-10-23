@@ -1,7 +1,4 @@
 #include "pch.h"
-#include "itkImage.h"
-#include "itkImageFileReader.h"
-#include "itkImageFileWriter.h"
 #include "itkImageSeriesReader.h"
 #include "itkScalarToRGBPixelFunctor.h"
 #include "itkMetaDataDictionary.h"
@@ -18,12 +15,9 @@
 #include "itkIntensityWindowingImageFilter.h"
 #include "DICOMParser.h"
 #include "itkOpenCVImageBridge.h"
-#include "opencv2/imgproc.hpp"
-#include "opencv2/core.hpp"
-#include "opencv2/highgui.hpp"
 
 #include <vector>
-
+#include <codecvt>
 
 extern "C" __declspec(dllexport) void ITKReadDCM(int Slice, signed short& WL, signed short& WW, std::string & FolderName, cv::Mat & Image)
 {
@@ -93,10 +87,6 @@ extern "C" __declspec(dllexport) void ITKInitializeDCM(std::string & FolderName,
 		img.convertTo(dst, CV_8U);
 		Images.push_back(dst);
 	}
-	
-
-	
-
 }
 
 extern "C" __declspec(dllexport) void ITKFileNames(std::string & FolderName, std::vector<std::string>& FileNames)
@@ -216,49 +206,85 @@ struct HDVolumeInfo
 	int BytesPerVoxel;
 	bool bIsSigned;
 };
-extern "C" __declspec(dllexport) bool ReadDicomSeriesToVolume(const std::vector<std::wstring>& series, HDVolumeInfo& outInfo, std::vector<uint8_t>& outData)
+
+extern "C" __declspec(dllexport)
+bool ReadDicomSeriesToVolume(
+	const char** series,
+	int fileCount,
+	uint8_t** outBuffer,
+	size_t* outSize,
+	HDVolumeInfo* outInfo)
 {
 	using PixelType = signed short;
 	using ImageType = itk::Image<PixelType, 3>;
 	using ReaderType = itk::ImageSeriesReader<ImageType>;
 	using ImageIOType = itk::GDCMImageIO;
+	using NamesGeneratorType = itk::GDCMSeriesFileNames;
 
 	try
 	{
+		// --- 1. Получаем папку ---
+		std::string firstFile = series[0];
+		size_t lastSlash = firstFile.find_last_of("/\\");
+		std::string folder = (lastSlash != std::string::npos) ? firstFile.substr(0, lastSlash) : firstFile;
+
+		// --- 2. Автоматически собираем и сортируем файлы по метаданным DICOM ---
+		NamesGeneratorType::Pointer nameGen = NamesGeneratorType::New();
+		nameGen->SetUseSeriesDetails(true);
+		nameGen->AddSeriesRestriction("0008|0021"); // Series Date
+		nameGen->SetDirectory(folder);
+
+		const ReaderType::FileNamesContainer sortedNames = nameGen->GetInputFileNames();
+
+		if (sortedNames.empty())
+		{
+			OutputDebugStringA("No DICOM files found or failed to read metadata.\n");
+			return false;
+		}
+
+		// --- 3. Настраиваем чтение ---
 		ReaderType::Pointer reader = ReaderType::New();
 		ImageIOType::Pointer dicomIO = ImageIOType::New();
 		reader->SetImageIO(dicomIO);
-
-		ReaderType::FileNamesContainer fileNames;
-		for (const auto& f : series)
-			fileNames.push_back(std::string(f.begin(), f.end()));
-
-		reader->SetFileNames(fileNames);
+		reader->SetFileNames(sortedNames);
 		reader->Update();
 
+		// --- 4. Копируем данные ---
 		ImageType::Pointer image = reader->GetOutput();
 		auto region = image->GetLargestPossibleRegion();
 		auto size = region.GetSize();
 		auto spacing = image->GetSpacing();
 
-		outInfo.DimX = size[0];
-		outInfo.DimY = size[1];
-		outInfo.DimZ = size[2];
-		outInfo.SpacingX = spacing[0];
-		outInfo.SpacingY = spacing[1];
-		outInfo.SpacingZ = spacing[2];
-		outInfo.BytesPerVoxel = sizeof(PixelType);
-		outInfo.bIsSigned = true;
+		const size_t voxelCount = static_cast<size_t>(size[0]) * size[1] * size[2];
+		const size_t totalBytes = voxelCount * sizeof(PixelType);
 
-		size_t voxelCount = static_cast<size_t>(size[0]) * size[1] * size[2];
-		outData.resize(voxelCount * sizeof(PixelType));
+		*outBuffer = new uint8_t[totalBytes];
+		*outSize = totalBytes;
+		memcpy(*outBuffer, image->GetBufferPointer(), totalBytes);
 
-		memcpy(outData.data(), image->GetBufferPointer(), outData.size());
+		if (outInfo)
+		{
+			outInfo->DimX = static_cast<int>(size[0]);
+			outInfo->DimY = static_cast<int>(size[1]);
+			outInfo->DimZ = static_cast<int>(size[2]);
+			outInfo->SpacingX = static_cast<float>(spacing[0]);
+			outInfo->SpacingY = static_cast<float>(spacing[1]);
+			outInfo->SpacingZ = static_cast<float>(spacing[2]);
+			outInfo->BytesPerVoxel = sizeof(PixelType);
+			outInfo->bIsSigned = true;
+		}
+
 		return true;
 	}
 	catch (itk::ExceptionObject& e)
 	{
-		OutputDebugStringA(e.what());
+		OutputDebugStringA(("ITK Exception: " + std::string(e.what()) + "\n").c_str());
 		return false;
 	}
+}
+
+extern "C" __declspec(dllexport)
+void FreeVolumeBuffer(uint8_t * buffer)
+{
+	delete[] buffer;
 }
