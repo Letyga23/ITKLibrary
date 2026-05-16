@@ -1,4 +1,4 @@
-#include "pch.h"
+п»ї#include "pch.h"
 #include "itkImageSeriesReader.h"
 #include "itkScalarToRGBPixelFunctor.h"
 #include "itkMetaDataDictionary.h"
@@ -15,6 +15,8 @@
 #include "itkIntensityWindowingImageFilter.h"
 #include "DICOMParser.h"
 #include "itkOpenCVImageBridge.h"
+#include "dcmtk/dcmdata/dctk.h"
+#include "dcmtk/dcmimgle/dcmimage.h"
 
 #include <vector>
 #include <codecvt>
@@ -207,73 +209,9 @@ struct HDVolumeInfo
 	bool bIsSigned;
 };
 
-//extern "C" __declspec(dllexport)
-//bool ReadDicomSeriesToVolume(const char** series, int fileCount, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
-//{
-//	using PixelType = signed short;
-//	using ImageType = itk::Image<PixelType, 3>;
-//	using ReaderType = itk::ImageSeriesReader<ImageType>;
-//	using ImageIOType = itk::GDCMImageIO;
-//
-//	try
-//	{
-//		ReaderType::Pointer reader = ReaderType::New();
-//		ImageIOType::Pointer dicomIO = ImageIOType::New();
-//		reader->SetImageIO(dicomIO);
-//
-//		ReaderType::FileNamesContainer fileNames;
-//		fileNames.reserve(fileCount);
-//		for (int i = 0; i < fileCount; ++i)
-//		{
-//			fileNames.push_back(series[i]); // уже UTF-8, конвертация не нужна
-//		}
-//
-//		reader->SetFileNames(fileNames);
-//		reader->Update();
-//
-//		ImageType::Pointer image = reader->GetOutput();
-//		auto region = image->GetLargestPossibleRegion();
-//		auto size = region.GetSize();
-//		auto spacing = image->GetSpacing();
-//
-//		const size_t voxelCount = static_cast<size_t>(size[0]) * size[1] * size[2];
-//		const size_t totalBytes = voxelCount * sizeof(PixelType);
-//
-//		*outBuffer = new uint8_t[totalBytes];
-//		*outSize = totalBytes;
-//		memcpy(*outBuffer, image->GetBufferPointer(), totalBytes);
-//
-//		if (outInfo)
-//		{
-//			outInfo->DimX = static_cast<int>(size[0]);
-//			outInfo->DimY = static_cast<int>(size[1]);
-//			outInfo->DimZ = static_cast<int>(size[2]);
-//			outInfo->SpacingX = static_cast<float>(spacing[0]);
-//			outInfo->SpacingY = static_cast<float>(spacing[1]);
-//			outInfo->SpacingZ = static_cast<float>(spacing[2]);
-//			outInfo->BytesPerVoxel = sizeof(PixelType);
-//			outInfo->bIsSigned = true;
-//		}
-//
-//		return true;
-//	}
-//	catch (itk::ExceptionObject& e)
-//	{
-//		OutputDebugStringA(("ITK Exception: " + std::string(e.what()) + "\n").c_str());
-//		return false;
-//	}
-//}
-
-
-extern "C" __declspec(dllexport)
-bool ReadDicomSeriesToVolume(
-	const char** series,
-	int fileCount,
-	uint8_t** outBuffer,
-	size_t* outSize,
-	HDVolumeInfo* outInfo)
+template<typename PixelType>
+bool ReadSeriesWithITK(const char** series, int fileCount, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
-	using PixelType = signed short;
 	using ImageType = itk::Image<PixelType, 3>;
 	using ReaderType = itk::ImageSeriesReader<ImageType>;
 	using ImageIOType = itk::GDCMImageIO;
@@ -281,30 +219,43 @@ bool ReadDicomSeriesToVolume(
 
 	try
 	{
+		if (fileCount == 0 || series == nullptr || series[0] == nullptr)
+			return false;
+
 		std::string firstFile = series[0];
 		size_t lastSlash = firstFile.find_last_of("/\\");
 		std::string folder = (lastSlash != std::string::npos) ? firstFile.substr(0, lastSlash) : firstFile;
 
-		NamesGeneratorType::Pointer nameGen = NamesGeneratorType::New();
+		typename NamesGeneratorType::Pointer nameGen = NamesGeneratorType::New();
 		nameGen->SetUseSeriesDetails(true);
-		nameGen->AddSeriesRestriction("0008|0021");
+		nameGen->AddSeriesRestriction("0020|000E");
 		nameGen->SetDirectory(folder);
 
-		const ReaderType::FileNamesContainer sortedNames = nameGen->GetInputFileNames();
+		typename ReaderType::FileNamesContainer sortedNames = nameGen->GetInputFileNames();
+
+		if (sortedNames.empty() && fileCount > 0)
+		{
+			sortedNames.resize(fileCount);
+			for (int i = 0; i < fileCount; ++i)
+				sortedNames[i] = series[i];
+		}
 
 		if (sortedNames.empty())
 		{
-			OutputDebugStringA("No DICOM files found or failed to read metadata.\n");
+			OutputDebugStringA("No DICOM files found.\n");
 			return false;
 		}
 
-		ReaderType::Pointer reader = ReaderType::New();
+		typename ReaderType::Pointer reader = ReaderType::New();
 		ImageIOType::Pointer dicomIO = ImageIOType::New();
+
 		reader->SetImageIO(dicomIO);
 		reader->SetFileNames(sortedNames);
+		reader->ForceOrthogonalDirectionOff();
+
 		reader->Update();
 
-		ImageType::Pointer image = reader->GetOutput();
+		typename ImageType::Pointer image = reader->GetOutput();
 		auto region = image->GetLargestPossibleRegion();
 		auto size = region.GetSize();
 		auto spacing = image->GetSpacing();
@@ -314,6 +265,7 @@ bool ReadDicomSeriesToVolume(
 
 		*outBuffer = new uint8_t[totalBytes];
 		*outSize = totalBytes;
+
 		memcpy(*outBuffer, image->GetBufferPointer(), totalBytes);
 
 		if (outInfo)
@@ -321,9 +273,11 @@ bool ReadDicomSeriesToVolume(
 			outInfo->DimX = static_cast<int>(size[0]);
 			outInfo->DimY = static_cast<int>(size[1]);
 			outInfo->DimZ = static_cast<int>(size[2]);
+
 			outInfo->SpacingX = static_cast<float>(spacing[0]);
 			outInfo->SpacingY = static_cast<float>(spacing[1]);
 			outInfo->SpacingZ = static_cast<float>(spacing[2]);
+
 			outInfo->BytesPerVoxel = sizeof(PixelType);
 			outInfo->bIsSigned = true;
 		}
@@ -332,7 +286,164 @@ bool ReadDicomSeriesToVolume(
 	}
 	catch (itk::ExceptionObject& e)
 	{
-		OutputDebugStringA(("ITK Exception: " + std::string(e.what()) + "\n").c_str());
+		std::string msg = "ITK Exception: " + std::string(e.what()) + "\n";
+		OutputDebugStringA(msg.c_str());
+		return false;
+	}
+	catch (std::exception& e)
+	{
+		std::string msg = "Exception: " + std::string(e.what()) + "\n";
+		OutputDebugStringA(msg.c_str());
+		return false;
+	}
+}
+
+bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
+{
+	Uint16 rows = 0, cols = 0, bitsAllocated = 0, pixelRep = 0;
+	Uint32 frames = 1;
+
+	ds->findAndGetUint16(DCM_Rows, rows);
+	ds->findAndGetUint16(DCM_Columns, cols);
+	ds->findAndGetUint16(DCM_BitsAllocated, bitsAllocated);
+	ds->findAndGetUint16(DCM_PixelRepresentation, pixelRep);
+	ds->findAndGetUint32(DCM_NumberOfFrames, frames);
+
+	if (rows == 0 || cols == 0 || frames == 0)
+		return false;
+
+	double spacingX = 1.0;
+	double spacingY = 1.0;
+	double spacingZ = 1.0;
+
+	OFString pixelSpacingStr;
+	if (ds->findAndGetOFString(DCM_PixelSpacing, pixelSpacingStr).good() && !pixelSpacingStr.empty())
+	{
+		double valY = 1.0, valX = 1.0;
+		if (sscanf_s(pixelSpacingStr.c_str(), "%lf\\%lf", &valY, &valX) == 2)
+		{
+			spacingX = valX;
+			spacingY = valY;
+		}
+	}
+
+	double spacingBetweenSlices = 0.0;
+	double sliceThickness = 0.0;
+
+	if (ds->findAndGetFloat64(DCM_SpacingBetweenSlices, spacingBetweenSlices).good() && spacingBetweenSlices > 0.0)
+		spacingZ = spacingBetweenSlices;
+	else if (ds->findAndGetFloat64(DCM_SliceThickness, sliceThickness).good() && sliceThickness > 0.0)
+		spacingZ = sliceThickness;
+
+	double slope = 1.0, intercept = 0.0;
+	ds->findAndGetFloat64(DCM_RescaleSlope, slope);
+	ds->findAndGetFloat64(DCM_RescaleIntercept, intercept);
+
+	const Uint16* pixelData = nullptr;
+	if (!ds->findAndGetUint16Array(DCM_PixelData, pixelData).good() || !pixelData)
+		return false;
+
+	const size_t voxelCount = static_cast<size_t>(cols) * rows * frames;
+	const size_t totalBytes = voxelCount * sizeof(float);
+
+	*outBuffer = new uint8_t[totalBytes];
+	*outSize = totalBytes;
+
+	float* dest = reinterpret_cast<float*>(*outBuffer);
+
+	for (size_t i = 0; i < voxelCount; ++i)
+	{
+		double val = (pixelRep == 0) ? static_cast<double>(pixelData[i]) : static_cast<double>(reinterpret_cast<const int16_t*>(pixelData)[i]);
+		dest[i] = static_cast<float>(val * slope + intercept);
+	}
+
+	if (outInfo)
+	{
+		outInfo->DimX = cols;
+		outInfo->DimY = rows;
+		outInfo->DimZ = frames;
+		outInfo->SpacingX = static_cast<float>(spacingX);
+		outInfo->SpacingY = static_cast<float>(spacingY);
+		outInfo->SpacingZ = static_cast<float>(spacingZ);
+		outInfo->BytesPerVoxel = sizeof(float);
+		outInfo->bIsSigned = true;
+	}
+
+	return true;
+}
+
+std::string Utf8ToAnsi(const std::string& utf8Str) 
+{
+	if (utf8Str.empty()) return "";
+
+	int wsize = MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, NULL, 0);
+	std::wstring wstr(wsize, 0);
+	MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, &wstr[0], wsize);
+
+	int asize = WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), -1, NULL, 0, NULL, NULL);
+	std::string ansiStr(asize, 0);
+	WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), -1, &ansiStr[0], asize, NULL, NULL);
+
+	if (!ansiStr.empty() && ansiStr.back() == '\0')
+		ansiStr.pop_back();
+
+	return ansiStr;
+}
+
+extern "C" __declspec(dllexport)
+bool ReadDicomSeriesToVolume(const char** series, int fileCount, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
+{
+	try
+	{
+		if (fileCount == 0 || series == nullptr || series[0] == nullptr)
+			return false;
+
+		std::string firstFile = series[0];
+		std::string firstFileAnsi = Utf8ToAnsi(firstFile);
+
+		DcmFileFormat dcmFile;
+		OFCondition status = dcmFile.loadFile(firstFileAnsi.c_str());
+		if (!status.good())
+		{
+			OutputDebugStringA("Failed to load DICOM file with DCMTK\n");
+			return false;
+		}
+
+		DcmDataset* ds = dcmFile.getDataset();
+		if (!ds)
+			return false;
+
+		Uint32 numberOfFrames = 1;
+		ds->findAndGetUint32(DCM_NumberOfFrames, numberOfFrames);
+
+		bool isMultiFrame = (numberOfFrames > 1);
+		bool isCT = false;
+
+		OFString modality;
+		if (ds->findAndGetOFString(DCM_Modality, modality).good())
+		{
+			if (modality == "CT")
+				isCT = true;
+		}
+
+		if (isMultiFrame)
+			return ReadMultiFrameWithDCMTK(ds, outBuffer, outSize, outInfo);
+		else
+		{
+			if (isCT)
+				return ReadSeriesWithITK<signed short>(series, fileCount, outBuffer, outSize, outInfo);
+			else
+				return ReadSeriesWithITK<float>(series, fileCount, outBuffer, outSize, outInfo);
+		}
+	}
+	catch (const itk::ExceptionObject& e)
+	{
+		OutputDebugStringA(("ITK Exception: " + std::string(e.GetDescription()) + "\n").c_str());
+		return false;
+	}
+	catch (const std::exception& e)
+	{
+		OutputDebugStringA(("Exception: " + std::string(e.what()) + "\n").c_str());
 		return false;
 	}
 }
