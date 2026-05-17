@@ -21,6 +21,24 @@
 #include <vector>
 #include <codecvt>
 
+std::string Utf8ToAnsi(const std::string& utf8Str)
+{
+	if (utf8Str.empty()) return "";
+
+	int wsize = MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, NULL, 0);
+	std::wstring wstr(wsize, 0);
+	MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, &wstr[0], wsize);
+
+	int asize = WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), -1, NULL, 0, NULL, NULL);
+	std::string ansiStr(asize, 0);
+	WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), -1, &ansiStr[0], asize, NULL, NULL);
+
+	if (!ansiStr.empty() && ansiStr.back() == '\0')
+		ansiStr.pop_back();
+
+	return ansiStr;
+}
+
 extern "C" __declspec(dllexport) void ITKReadDCM(int Slice, signed short& WL, signed short& WW, std::string & FolderName, cv::Mat & Image)
 {
 	using PixelType = signed short;
@@ -210,7 +228,7 @@ struct HDVolumeInfo
 };
 
 template<typename PixelType>
-bool ReadSeriesWithITK(const char** series, int fileCount, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
+bool ReadSeriesWithITK(std::string firstFile, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
 	using ImageType = itk::Image<PixelType, 3>;
 	using ReaderType = itk::ImageSeriesReader<ImageType>;
@@ -219,10 +237,9 @@ bool ReadSeriesWithITK(const char** series, int fileCount, uint8_t** outBuffer, 
 
 	try
 	{
-		if (fileCount == 0 || series == nullptr || series[0] == nullptr)
+		if (firstFile.empty())
 			return false;
 
-		std::string firstFile = series[0];
 		size_t lastSlash = firstFile.find_last_of("/\\");
 		std::string folder = (lastSlash != std::string::npos) ? firstFile.substr(0, lastSlash) : firstFile;
 
@@ -231,18 +248,53 @@ bool ReadSeriesWithITK(const char** series, int fileCount, uint8_t** outBuffer, 
 		nameGen->AddSeriesRestriction("0020|000E");
 		nameGen->SetDirectory(folder);
 
-		typename ReaderType::FileNamesContainer sortedNames = nameGen->GetInputFileNames();
-
-		if (sortedNames.empty() && fileCount > 0)
+		std::string targetUID = "";
 		{
-			sortedNames.resize(fileCount);
-			for (int i = 0; i < fileCount; ++i)
-				sortedNames[i] = series[i];
+			std::string firstFileAnsi = Utf8ToAnsi(firstFile);
+			DcmFileFormat dcmFile;
+			if (dcmFile.loadFile(firstFileAnsi.c_str()).good() && dcmFile.getDataset())
+			{
+				OFString seriesUID;
+				if (dcmFile.getDataset()->findAndGetOFString(DCM_SeriesInstanceUID, seriesUID).good())
+				{
+					targetUID = seriesUID.c_str();
+					targetUID.erase(targetUID.find_last_not_of(" \n\r\t") + 1);
+				}
+			}
+		}
+
+		if (targetUID.empty())
+		{
+			OutputDebugStringA("Error: Could not read SeriesInstanceUID from target file.\n");
+			return false;
+		}
+
+		std::vector<std::string> uids = nameGen->GetSeriesUIDs();
+		std::string seriesToLoad = "";
+
+		for (const auto& uid : uids)
+		{
+			if (uid == targetUID || uid.find(targetUID) != std::string::npos)
+			{
+				seriesToLoad = uid;
+				break;
+			}
+		}
+
+		typename ReaderType::FileNamesContainer sortedNames;
+		if (seriesToLoad.empty())
+		{
+			OutputDebugStringA("Warning: Target UID match not found. Loading default input file names.\n");
+			sortedNames = nameGen->GetInputFileNames();
+		}
+		else
+		{
+			sortedNames = nameGen->GetFileNames(seriesToLoad);
 		}
 
 		if (sortedNames.empty())
 		{
-			OutputDebugStringA("No DICOM files found.\n");
+			OutputDebugStringA("No DICOM files found for the selected series.\n");
 			return false;
 		}
 
@@ -256,9 +308,13 @@ bool ReadSeriesWithITK(const char** series, int fileCount, uint8_t** outBuffer, 
 		reader->Update();
 
 		typename ImageType::Pointer image = reader->GetOutput();
+		if (!image) return false;
+
 		auto region = image->GetLargestPossibleRegion();
 		auto size = region.GetSize();
 		auto spacing = image->GetSpacing();
+
+		if (size[0] == 0 || size[1] == 0 || size[2] == 0) return false;
 
 		const size_t voxelCount = static_cast<size_t>(size[0]) * size[1] * size[2];
 		const size_t totalBytes = voxelCount * sizeof(PixelType);
@@ -279,21 +335,22 @@ bool ReadSeriesWithITK(const char** series, int fileCount, uint8_t** outBuffer, 
 			outInfo->SpacingZ = static_cast<float>(spacing[2]);
 
 			outInfo->BytesPerVoxel = sizeof(PixelType);
-			outInfo->bIsSigned = true;
+			outInfo->bIsSigned = std::numeric_limits<PixelType>::is_signed;
 		}
+
+		std::string logMsg = "Successfully loaded target series. Slices: " + std::to_string(size[2]) + "\n";
+		OutputDebugStringA(logMsg.c_str());
 
 		return true;
 	}
-	catch (itk::ExceptionObject& e)
+	catch (const itk::ExceptionObject& e)
 	{
-		std::string msg = "ITK Exception: " + std::string(e.what()) + "\n";
-		OutputDebugStringA(msg.c_str());
+		OutputDebugStringA(("ITK Exception: " + std::string(e.what()) + "\n").c_str());
 		return false;
 	}
-	catch (std::exception& e)
+	catch (const std::exception& e)
 	{
-		std::string msg = "Exception: " + std::string(e.what()) + "\n";
-		OutputDebugStringA(msg.c_str());
+		OutputDebugStringA(("Exception: " + std::string(e.what()) + "\n").c_str());
 		return false;
 	}
 }
@@ -372,34 +429,17 @@ bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSiz
 	return true;
 }
 
-std::string Utf8ToAnsi(const std::string& utf8Str) 
-{
-	if (utf8Str.empty()) return "";
-
-	int wsize = MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, NULL, 0);
-	std::wstring wstr(wsize, 0);
-	MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, &wstr[0], wsize);
-
-	int asize = WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), -1, NULL, 0, NULL, NULL);
-	std::string ansiStr(asize, 0);
-	WideCharToMultiByte(CP_ACP, 0, wstr.c_str(), -1, &ansiStr[0], asize, NULL, NULL);
-
-	if (!ansiStr.empty() && ansiStr.back() == '\0')
-		ansiStr.pop_back();
-
-	return ansiStr;
-}
-
 extern "C" __declspec(dllexport)
-bool ReadDicomSeriesToVolume(const char** series, int fileCount, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
+bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
 	try
 	{
-		if (fileCount == 0 || series == nullptr || series[0] == nullptr)
+		if (firstFilePath == nullptr)
 			return false;
 
-		std::string firstFile = series[0];
+		std::string firstFile = firstFilePath;
 		std::string firstFileAnsi = Utf8ToAnsi(firstFile);
+
 
 		DcmFileFormat dcmFile;
 		OFCondition status = dcmFile.loadFile(firstFileAnsi.c_str());
@@ -431,9 +471,9 @@ bool ReadDicomSeriesToVolume(const char** series, int fileCount, uint8_t** outBu
 		else
 		{
 			if (isCT)
-				return ReadSeriesWithITK<signed short>(series, fileCount, outBuffer, outSize, outInfo);
+				return ReadSeriesWithITK<signed short>(firstFile, outBuffer, outSize, outInfo);
 			else
-				return ReadSeriesWithITK<float>(series, fileCount, outBuffer, outSize, outInfo);
+				return ReadSeriesWithITK<float>(firstFile, outBuffer, outSize, outInfo);
 		}
 	}
 	catch (const itk::ExceptionObject& e)
