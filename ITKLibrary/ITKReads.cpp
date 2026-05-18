@@ -42,6 +42,108 @@ std::string Utf8ToAnsi(const std::string& utf8Str)
 	return ansiStr;
 }
 
+struct DcmTagKeyHash {
+	std::size_t operator()(const DcmTagKey& k) const {
+		return (static_cast<std::size_t>(k.getGroup()) << 16) | k.getElement();
+	}
+};
+
+using FrameDataMapDCMTK = std::unordered_map<DcmTagKey, std::string, DcmTagKeyHash>;
+
+bool FindTagRecursiveUint32(DcmItem* item, const DcmTagKey& target, Uint32& outValue)
+{
+	if (!item) return false;
+
+	if (item->findAndGetUint32(target, outValue, 0, OFFalse).good())
+		return true;
+
+	unsigned long numElements = item->card();
+	for (unsigned long i = 0; i < numElements; ++i)
+	{
+		DcmElement* elem = item->getElement(i);
+		if (elem && elem->ident() == EVR_SQ)
+		{
+			DcmSequenceOfItems* sq = reinterpret_cast<DcmSequenceOfItems*>(elem);
+			unsigned long numItems = sq->card();
+			for (unsigned long j = 0; j < numItems; ++j)
+			{
+				if (FindTagRecursiveUint32(sq->getItem(j), target, outValue))
+					return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool BuildFramesDataDCMTK(DcmDataset* ds, std::vector<FrameDataMapDCMTK>& outFramesData)
+{
+	if (!ds) return false;
+
+	DcmTagKey perFrameTag(0x5200, 0x9230);
+	DcmElement* element = nullptr;
+	if (!ds->findAndGetElement(perFrameTag, element).good() || !element)
+		return false;
+
+	if (element->ident() != EVR_SQ)
+		return false;
+
+	DcmSequenceOfItems* perSeq = reinterpret_cast<DcmSequenceOfItems*>(element);
+	unsigned long numFrames = perSeq->card();
+	if (numFrames == 0)
+		return false;
+
+	outFramesData.resize(numFrames);
+
+	const std::vector<DcmTagKey> neededTags = {
+		DCM_PixelData,
+		DCM_NumberOfFrames,
+		DCM_RescaleSlope,
+		DCM_RescaleIntercept,
+		DCM_SpacingBetweenSlices,
+		DCM_SliceThickness,
+		DCM_ImagePositionPatient,
+		DCM_PixelSpacing,
+		DCM_Rows,
+		DCM_Columns,
+		DCM_BitsAllocated,
+		DCM_PixelRepresentation
+	};
+
+	auto extractLambda = [](DcmItem* item, const std::vector<DcmTagKey>& tags, FrameDataMapDCMTK& outMap, auto& self) -> void {
+		for (const auto& tag : tags) {
+			if (outMap.find(tag) != outMap.end()) continue;
+			OFString ofStr;
+			if (item->findAndGetOFString(tag, ofStr, 0, OFFalse).good()) {
+				std::string value(ofStr.c_str());
+				value.erase(std::remove(value.begin(), value.end(), '\0'), value.end());
+				outMap[tag] = value;
+			}
+		}
+		if (outMap.size() == tags.size()) return;
+
+		unsigned long numElems = item->card();
+		for (unsigned long i = 0; i < numElems; ++i) {
+			DcmElement* elem = item->getElement(i);
+			if (elem && elem->ident() == EVR_SQ) {
+				DcmSequenceOfItems* sq = reinterpret_cast<DcmSequenceOfItems*>(elem);
+				unsigned long numItems = sq->card();
+				for (unsigned long j = 0; j < numItems; ++j) {
+					self(sq->getItem(j), tags, outMap, self);
+				}
+			}
+		}
+		};
+
+	for (unsigned long i = 0; i < numFrames; ++i)
+	{
+		DcmItem* frameItem = perSeq->getItem(i);
+		if (frameItem) {
+			extractLambda(frameItem, neededTags, outFramesData[i], extractLambda);
+		}
+	}
+	return true;
+}
+
 extern "C" __declspec(dllexport) void ITKReadDCM(int Slice, signed short& WL, signed short& WW, std::string & FolderName, cv::Mat & Image)
 {
 	using PixelType = signed short;
@@ -493,24 +595,35 @@ bool ReadSeriesWithITK( const std::string& firstFile, uint8_t** outBuffer, size_
 
 bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
+	OutputDebugStringA("aaaaa\n");
+
 	Uint16 rows = 0, cols = 0, bitsAllocated = 0, pixelRep = 0;
 	Uint32 frames = 1;
 
-	ds->findAndGetUint16(DCM_Rows, rows);
-	ds->findAndGetUint16(DCM_Columns, cols);
-	ds->findAndGetUint16(DCM_BitsAllocated, bitsAllocated);
-	ds->findAndGetUint16(DCM_PixelRepresentation, pixelRep);
-	ds->findAndGetUint32(DCM_NumberOfFrames, frames);
+	ds->findAndGetUint16(DCM_Rows, rows, 0, OFTrue);
+	ds->findAndGetUint16(DCM_Columns, cols, 0, OFTrue);
+	ds->findAndGetUint16(DCM_BitsAllocated, bitsAllocated, 0, OFTrue);
+	ds->findAndGetUint16(DCM_PixelRepresentation, pixelRep, 0, OFTrue);
+
+	if (!FindTagRecursiveUint32(ds, DCM_NumberOfFrames, frames) || frames <= 1)
+	{
+		DcmTagKey perFrameTag(0x5200, 0x9230);
+		DcmElement* element = nullptr;
+		if (ds->findAndGetElement(perFrameTag, element).good() && element && element->ident() == EVR_SQ)
+			frames = static_cast<Uint32>(reinterpret_cast<DcmSequenceOfItems*>(element)->card());
+	}
 
 	if (rows == 0 || cols == 0 || frames == 0)
 		return false;
 
+	std::vector<FrameDataMapDCMTK> framesData;
+	bool hasPerFrameData = BuildFramesDataDCMTK(ds, framesData) && !framesData.empty();
+
 	double spacingX = 1.0;
 	double spacingY = 1.0;
-	double spacingZ = 1.0;
-
 	OFString pixelSpacingStr;
-	if (ds->findAndGetOFString(DCM_PixelSpacing, pixelSpacingStr).good() && !pixelSpacingStr.empty())
+
+	if (ds->findAndGetOFString(DCM_PixelSpacing, pixelSpacingStr, 0, OFTrue).good() && !pixelSpacingStr.empty())
 	{
 		double valY = 1.0, valX = 1.0;
 		if (sscanf_s(pixelSpacingStr.c_str(), "%lf\\%lf", &valY, &valX) == 2)
@@ -519,18 +632,51 @@ bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSiz
 			spacingY = valY;
 		}
 	}
+	else if (hasPerFrameData && framesData[0].find(DCM_PixelSpacing) != framesData[0].end())
+	{
+		std::string pSpacing = framesData[0][DCM_PixelSpacing];
+		double valY = 1.0, valX = 1.0;
+		if (sscanf_s(pSpacing.c_str(), "%lf\\%lf", &valY, &valX) == 2)
+		{
+			spacingX = valX;
+			spacingY = valY;
+		}
+	}
 
+	double spacingZ = 1.0;
 	double spacingBetweenSlices = 0.0;
 	double sliceThickness = 0.0;
 
-	if (ds->findAndGetFloat64(DCM_SpacingBetweenSlices, spacingBetweenSlices).good() && spacingBetweenSlices > 0.0)
+	if (ds->findAndGetFloat64(DCM_SpacingBetweenSlices, spacingBetweenSlices, 0, OFTrue).good() && spacingBetweenSlices > 0.0)
 		spacingZ = spacingBetweenSlices;
-	else if (ds->findAndGetFloat64(DCM_SliceThickness, sliceThickness).good() && sliceThickness > 0.0)
+	else if (ds->findAndGetFloat64(DCM_SliceThickness, sliceThickness, 0, OFTrue).good() && sliceThickness > 0.0)
 		spacingZ = sliceThickness;
+	else if (hasPerFrameData)
+	{
+		if (framesData[0].find(DCM_SliceThickness) != framesData[0].end() && !framesData[0][DCM_SliceThickness].empty())
+			spacingZ = std::stod(framesData[0][DCM_SliceThickness]);
+		else if (frames > 1 && framesData.size() > 1 && framesData[0].find(DCM_ImagePositionPatient) != framesData[0].end() && framesData[1].find(DCM_ImagePositionPatient) != framesData[1].end())
+		{
+			double x0, y0, z0, x1, y1, z1;
+			if (sscanf_s(framesData[0][DCM_ImagePositionPatient].c_str(), "%lf\\%lf\\%lf", &x0, &y0, &z0) == 3 && sscanf_s(framesData[1][DCM_ImagePositionPatient].c_str(), "%lf\\%lf\\%lf", &x1, &y1, &z1) == 3)
+			{
+				double diff = std::sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0) + (z1 - z0) * (z1 - z0));
+				if (diff > 0.0) spacingZ = diff;
+			}
+		}
+	}
 
 	double slope = 1.0, intercept = 0.0;
-	ds->findAndGetFloat64(DCM_RescaleSlope, slope);
-	ds->findAndGetFloat64(DCM_RescaleIntercept, intercept);
+	if (!ds->findAndGetFloat64(DCM_RescaleSlope, slope, 0, OFTrue).good())
+	{
+		if (hasPerFrameData && framesData[0].find(DCM_RescaleSlope) != framesData[0].end() && !framesData[0][DCM_RescaleSlope].empty())
+			slope = std::stod(framesData[0][DCM_RescaleSlope]);
+	}
+	if (!ds->findAndGetFloat64(DCM_RescaleIntercept, intercept, 0, OFTrue).good())
+	{
+		if (hasPerFrameData && framesData[0].find(DCM_RescaleIntercept) != framesData[0].end() && !framesData[0][DCM_RescaleIntercept].empty())
+			intercept = std::stod(framesData[0][DCM_RescaleIntercept]);
+	}
 
 	const Uint16* pixelData = nullptr;
 	if (!ds->findAndGetUint16Array(DCM_PixelData, pixelData).good() || !pixelData)
@@ -565,6 +711,56 @@ bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSiz
 	return true;
 }
 
+bool isMultiFrame(DcmDataset* ds)
+{
+	Uint32 numberOfFrames = 1;
+
+	bool foundFramesTag = FindTagRecursiveUint32(ds, DCM_NumberOfFrames, numberOfFrames);
+
+	if (!foundFramesTag || numberOfFrames <= 1)
+	{
+		DcmTagKey perFrameTag(0x5200, 0x9230);
+		DcmElement* element = nullptr;
+		if (ds->findAndGetElement(perFrameTag, element).good() && element && element->ident() == EVR_SQ)
+		{
+			DcmSequenceOfItems* perSeq = reinterpret_cast<DcmSequenceOfItems*>(element);
+			unsigned long card = perSeq->card();
+			if (card > 1)
+			{
+				numberOfFrames = static_cast<Uint32>(card);
+				foundFramesTag = true;
+				//OutputDebugStringA(("Detected Enhanced DICOM frames via PerFrame Sequence: " + std::to_string(numberOfFrames) + "\n").c_str());
+			}
+		}
+	}
+
+	if (!foundFramesTag || numberOfFrames <= 1)
+	{
+		DcmElement* element = nullptr;
+		if (ds->findAndGetElement(DCM_PixelData, element).good() && element)
+		{
+			E_TransferSyntax xfer = ds->getCurrentXfer();
+			DcmXfer xferSyn(xfer);
+			if (xferSyn.isEncapsulated())
+			{
+				DcmPixelData* pixData = reinterpret_cast<DcmPixelData*>(element);
+				DcmPixelSequence* pixSeq = nullptr;
+				if (pixData->getEncapsulatedRepresentation(xfer, nullptr, pixSeq).good() && pixSeq)
+				{
+					unsigned long card = pixSeq->card();
+					if (card > 1)
+					{
+						numberOfFrames = static_cast<Uint32>(card - 1);
+						//OutputDebugStringA(("Detected Compressed Frames via PixelSequence: " + std::to_string(numberOfFrames) + "\n").c_str());
+					}
+				}
+			}
+		}
+	}
+
+	return numberOfFrames > 1;
+}
+
 extern "C" __declspec(dllexport)
 bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
@@ -576,7 +772,6 @@ bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, siz
 		std::string firstFile = firstFilePath;
 		std::string firstFileAnsi = Utf8ToAnsi(firstFile);
 
-
 		DcmFileFormat dcmFile;
 		OFCondition status = dcmFile.loadFile(firstFileAnsi.c_str());
 		if (!status.good())
@@ -585,16 +780,11 @@ bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, siz
 			return false;
 		}
 
-		DcmDataset* ds = dcmFile.getDataset( );
+		DcmDataset* ds = dcmFile.getDataset();
 		if (!ds)
 			return false;
 
-		Uint32 numberOfFrames = 1;
-		ds->findAndGetUint32(DCM_NumberOfFrames, numberOfFrames);
-
-		bool isMultiFrame = (numberOfFrames > 1);
-
-		if (isMultiFrame)
+		if (isMultiFrame(ds))
 			return ReadMultiFrameWithDCMTK(ds, outBuffer, outSize, outInfo);
 		else
 			return ReadSeriesWithITK(firstFile, outBuffer, outSize, outInfo);
@@ -610,6 +800,9 @@ bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, siz
 		return false;
 	}
 }
+
+
+
 
 extern "C" __declspec(dllexport)
 void FreeVolumeBuffer(uint8_t * buffer)
