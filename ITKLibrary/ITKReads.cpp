@@ -17,6 +17,9 @@
 #include "itkOpenCVImageBridge.h"
 #include "dcmtk/dcmdata/dctk.h"
 #include "dcmtk/dcmimgle/dcmimage.h"
+#include <itkOrientImageFilter.h>
+#include <itkSpatialOrientation.h>
+#include <itkCastImageFilter.h>
 
 #include <vector>
 #include <codecvt>
@@ -355,6 +358,139 @@ bool ReadSeriesWithITK(std::string firstFile, uint8_t** outBuffer, size_t* outSi
 	}
 }
 
+bool ReadSeriesWithITK( const std::string& firstFile, uint8_t** outBuffer, size_t* outSize,	HDVolumeInfo* outInfo)
+{
+	using InputPixelType = short;
+	using OutputPixelType = float;
+	using InputImageType = itk::Image<InputPixelType, 3>;
+	using OutputImageType = itk::Image<OutputPixelType, 3>;
+	using ReaderType = itk::ImageSeriesReader<InputImageType>;
+	using ImageIOType = itk::GDCMImageIO;
+	using NamesGeneratorType = itk::GDCMSeriesFileNames;
+	using OrientFilterType = itk::OrientImageFilter<InputImageType, InputImageType>;
+	using CastFilterType = itk::CastImageFilter<InputImageType, OutputImageType>;
+
+	try
+	{
+		if (!outBuffer || !outSize || firstFile.empty())
+			return false;
+
+		*outBuffer = nullptr;
+		*outSize = 0;
+
+		size_t lastSlash = firstFile.find_last_of("/\\");
+		std::string folder = (lastSlash != std::string::npos) ? firstFile.substr(0, lastSlash) : firstFile;
+
+		std::string targetUID;
+
+		{
+			DcmFileFormat dcmFile;
+			std::string firstFileAnsi = Utf8ToAnsi(firstFile);
+
+			if (!dcmFile.loadFile(firstFileAnsi.c_str()).good())
+				return false;
+
+			OFString uid;
+			if (!dcmFile.getDataset()->findAndGetOFString( DCM_SeriesInstanceUID, uid).good())
+				return false;
+
+			targetUID = uid.c_str();
+
+			targetUID.erase(targetUID.find_last_not_of( " \n\r\t") + 1);
+		}
+
+		if (targetUID.empty())
+			return false;
+
+		NamesGeneratorType::Pointer nameGen = NamesGeneratorType::New();
+
+		nameGen->SetUseSeriesDetails(true);
+		nameGen->AddSeriesRestriction("0008|0021");
+		nameGen->SetDirectory(folder);
+
+		std::vector<std::string> uids = nameGen->GetSeriesUIDs();
+
+		std::string seriesToLoad;
+
+		for (const auto& uid : uids)
+		{
+			if (uid == targetUID || uid.find(targetUID) != std::string::npos)
+				seriesToLoad = uid;
+				break;
+		}
+
+		ReaderType::FileNamesContainer fileNames;
+
+		if (seriesToLoad.empty())
+			fileNames = nameGen->GetInputFileNames();
+		else
+			fileNames = nameGen->GetFileNames(seriesToLoad);
+
+		if (fileNames.empty())
+			return false;
+
+		ReaderType::Pointer reader = ReaderType::New();
+		reader->SetImageIO(ImageIOType::New());
+		reader->SetFileNames(fileNames);
+		reader->ForceOrthogonalDirectionOff();
+		reader->Update();
+
+		OrientFilterType::Pointer orienter = OrientFilterType::New();
+		orienter->UseImageDirectionOn();
+		orienter->SetDesiredCoordinateOrientation(itk::SpatialOrientation::ITK_COORDINATE_ORIENTATION_RAI);
+		orienter->SetInput(reader->GetOutput());
+		orienter->Update();
+
+		CastFilterType::Pointer caster = CastFilterType::New();
+		caster->SetInput(orienter->GetOutput());
+		caster->Update();
+
+		OutputImageType::Pointer image = caster->GetOutput();
+
+		if (!image)
+			return false;
+
+		auto region = image->GetLargestPossibleRegion();
+
+		auto size = region.GetSize();
+
+		auto spacing = image->GetSpacing();
+
+		if (size[0] == 0 || size[1] == 0 || size[2] == 0)
+			return false;
+
+		const size_t voxelCount = static_cast<size_t>(size[0]) * size[1] * size[2];
+		const size_t totalBytes = voxelCount *sizeof(OutputPixelType);
+
+		*outBuffer = new uint8_t[totalBytes];
+
+		memcpy(*outBuffer, image->GetBufferPointer(), totalBytes);
+		*outSize = totalBytes;
+
+		if (outInfo)
+		{
+			outInfo->DimX = static_cast<int>(size[0]);
+			outInfo->DimY = static_cast<int>(size[1]);
+			outInfo->DimZ = static_cast<int>(size[2]);
+			outInfo->SpacingX = static_cast<float>(spacing[0]);
+			outInfo->SpacingY = static_cast<float>(spacing[1]);
+			outInfo->SpacingZ = static_cast<float>(spacing[2]);
+			outInfo->BytesPerVoxel = sizeof(OutputPixelType);
+			outInfo->bIsSigned = true;
+		}
+
+		return true;
+	}
+	catch (const itk::ExceptionObject&)
+	{
+		return false;
+	}
+	catch (...)
+	{
+		return false;
+	}
+}
+
 bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
 	Uint16 rows = 0, cols = 0, bitsAllocated = 0, pixelRep = 0;
@@ -449,7 +585,7 @@ bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, siz
 			return false;
 		}
 
-		DcmDataset* ds = dcmFile.getDataset();
+		DcmDataset* ds = dcmFile.getDataset( );
 		if (!ds)
 			return false;
 
@@ -457,24 +593,11 @@ bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, siz
 		ds->findAndGetUint32(DCM_NumberOfFrames, numberOfFrames);
 
 		bool isMultiFrame = (numberOfFrames > 1);
-		bool isCT = false;
-
-		OFString modality;
-		if (ds->findAndGetOFString(DCM_Modality, modality).good())
-		{
-			if (modality == "CT")
-				isCT = true;
-		}
 
 		if (isMultiFrame)
 			return ReadMultiFrameWithDCMTK(ds, outBuffer, outSize, outInfo);
 		else
-		{
-			if (isCT)
-				return ReadSeriesWithITK<signed short>(firstFile, outBuffer, outSize, outInfo);
-			else
-				return ReadSeriesWithITK<float>(firstFile, outBuffer, outSize, outInfo);
-		}
+			return ReadSeriesWithITK(firstFile, outBuffer, outSize, outInfo);
 	}
 	catch (const itk::ExceptionObject& e)
 	{
