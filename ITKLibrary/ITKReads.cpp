@@ -484,6 +484,7 @@ bool ReadSeriesWithITK( const std::string& firstFile, uint8_t** outBuffer, size_
 		std::string folder = (lastSlash != std::string::npos) ? firstFile.substr(0, lastSlash) : firstFile;
 
 		std::string targetUID;
+		std::string targetDescription;
 
 		{
 			DcmFileFormat dcmFile;
@@ -492,13 +493,24 @@ bool ReadSeriesWithITK( const std::string& firstFile, uint8_t** outBuffer, size_
 			if (!dcmFile.loadFile(firstFileAnsi.c_str()).good())
 				return false;
 
-			OFString uid;
-			if (!dcmFile.getDataset()->findAndGetOFString( DCM_SeriesInstanceUID, uid).good())
+			DcmDataset* ds = dcmFile.getDataset();
+			if (!ds) 
 				return false;
 
-			targetUID = uid.c_str();
+			OFString uid, desc;
+			if (!ds->findAndGetOFString(DCM_SeriesInstanceUID, uid).good())
+				return false;
 
-			targetUID.erase(targetUID.find_last_not_of( " \n\r\t") + 1);
+			ds->findAndGetOFString(DCM_SeriesDescription, desc);
+
+			targetUID = uid.c_str();
+			targetDescription = desc.c_str();
+
+			targetUID.erase(targetUID.find_last_not_of(" \n\r\t") + 1);
+			targetUID.erase(0, targetUID.find_first_not_of(" \n\r\t"));
+
+			targetDescription.erase(targetDescription.find_last_not_of(" \n\r\t") + 1);
+			targetDescription.erase(0, targetDescription.find_first_not_of(" \n\r\t"));
 		}
 
 		if (targetUID.empty())
@@ -508,25 +520,64 @@ bool ReadSeriesWithITK( const std::string& firstFile, uint8_t** outBuffer, size_
 
 		nameGen->SetUseSeriesDetails(true);
 		nameGen->AddSeriesRestriction("0008|0021");
+		nameGen->AddSeriesRestriction("0008|103e");
+		nameGen->AddSeriesRestriction("0020|0011");
+
 		nameGen->SetDirectory(folder);
 
-		std::vector<std::string> uids = nameGen->GetSeriesUIDs();
-
+		std::vector<std::string> combinedUIDs = nameGen->GetSeriesUIDs();
 		std::string seriesToLoad;
 
-		for (const auto& uid : uids)
+		for (const auto& combinedId : combinedUIDs)
 		{
-			if (uid == targetUID || uid.find(targetUID) != std::string::npos)
-				seriesToLoad = uid;
-				break;
+			ReaderType::FileNamesContainer filesInGroup = nameGen->GetFileNames(combinedId);
+			if (filesInGroup.empty())
+				continue;
+
+			DcmFileFormat checkFile;
+			if (checkFile.loadFile(filesInGroup[0].c_str()).good() && checkFile.getDataset())
+			{
+				OFString currentUID, currentDesc;
+				checkFile.getDataset()->findAndGetOFString(DCM_SeriesInstanceUID, currentUID);
+				checkFile.getDataset()->findAndGetOFString(DCM_SeriesDescription, currentDesc);
+
+				std::string strUID = currentUID.c_str();
+				std::string strDesc = currentDesc.c_str();
+
+				strUID.erase(strUID.find_last_not_of(" \n\r\t") + 1);
+				strUID.erase(0, strUID.find_first_not_of(" \n\r\t"));
+				strDesc.erase(strDesc.find_last_not_of(" \n\r\t") + 1);
+				strDesc.erase(0, strDesc.find_first_not_of(" \n\r\t"));
+
+				if (strUID == targetUID && strDesc == targetDescription)
+				{
+					seriesToLoad = combinedId;
+					break;
+				}
+			}
 		}
 
-		ReaderType::FileNamesContainer fileNames;
+			for (const auto& combinedId : combinedUIDs) 
+			{
+				if (combinedId.find(targetUID) != std::string::npos) 
+				{
+					seriesToLoad = combinedId;
+					break;
+				}
+			}
 
+		ReaderType::FileNamesContainer fileNames;
 		if (seriesToLoad.empty())
-			fileNames = nameGen->GetInputFileNames();
+		{
+			if (!combinedUIDs.empty())
+				fileNames = nameGen->GetFileNames(combinedUIDs[0]);
+			else
+				fileNames = nameGen->GetInputFileNames();
+		}
 		else
+		{
 			fileNames = nameGen->GetFileNames(seriesToLoad);
+		}
 
 		if (fileNames.empty())
 			return false;
@@ -595,8 +646,6 @@ bool ReadSeriesWithITK( const std::string& firstFile, uint8_t** outBuffer, size_
 
 bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
-	OutputDebugStringA("aaaaa\n");
-
 	Uint16 rows = 0, cols = 0, bitsAllocated = 0, pixelRep = 0;
 	Uint32 frames = 1;
 
