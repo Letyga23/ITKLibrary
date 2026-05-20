@@ -14,7 +14,6 @@
 #include "gdcmFileDecompressLookupTable.h"
 #include "itkIntensityWindowingImageFilter.h"
 #include "DICOMParser.h"
-#include "itkOpenCVImageBridge.h"
 #include "dcmtk/dcmdata/dctk.h"
 #include "dcmtk/dcmimgle/dcmimage.h"
 #include <itkOrientImageFilter.h>
@@ -142,76 +141,6 @@ bool BuildFramesDataDCMTK(DcmDataset* ds, std::vector<FrameDataMapDCMTK>& outFra
 		}
 	}
 	return true;
-}
-
-extern "C" __declspec(dllexport) void ITKReadDCM(int Slice, signed short& WL, signed short& WW, std::string & FolderName, cv::Mat & Image)
-{
-	using PixelType = signed short;
-	constexpr unsigned int Dimension = 3; // The dimension is 3, not 2
-	using ImageType = itk::Image<PixelType, Dimension>;
-	using ImageIOType = itk::DCMTKImageIO;
-	using IntensityWindowingImageFilterType = itk::IntensityWindowingImageFilter<ImageType, ImageType>;
-	itk::DCMTKImageIO::Pointer DicomIO = itk::DCMTKImageIO::New();
-	itk::DCMTKSeriesFileNames::Pointer nameGenarator = itk::DCMTKSeriesFileNames::New();
-	nameGenarator->SetDirectory(FolderName);
-	using FilenamesContainer = std::vector<std::string>;
-	FilenamesContainer FileNames = nameGenarator->GetInputFileNames();
-	cv::Mat img;
-	using ReaderType = itk::ImageSeriesReader<ImageType>;
-	ReaderType::Pointer reader = ReaderType::New();
-	
-	auto filter = IntensityWindowingImageFilterType::New();
-	auto var = FileNames[Slice];
-	
-	reader->SetFileName(var);
-	reader->SetImageIO(DicomIO);
-	reader->Update();
-	filter->SetInput(reader->GetOutput());
-	filter->SetWindowMinimum(0);
-	filter->SetWindowMaximum(100);
-	filter->SetWindowLevel(WW, WL);
-	filter->SetOutputMinimum(0);
-	filter->SetOutputMaximum(255);
-	filter->Update();
-	img = itk::OpenCVImageBridge::ITKImageToCVMat<ImageType>(filter->GetOutput());
-	img.convertTo(Image, CV_8U);
-
-}
-
-extern "C" __declspec(dllexport) void ITKInitializeDCM(std::string & FolderName, std::vector <cv::Mat> & Images)
-{
-	using PixelType = signed short;
-	constexpr unsigned int Dimension = 3; // The dimension is 3, not 2
-	using ImageType = itk::Image<PixelType, Dimension>;
-	using ImageIOType = itk::DCMTKImageIO;
-	using IntensityWindowingImageFilterType = itk::IntensityWindowingImageFilter<ImageType, ImageType>;
-	itk::DCMTKImageIO::Pointer DicomIO = itk::DCMTKImageIO::New();
-	itk::DCMTKSeriesFileNames::Pointer nameGenarator = itk::DCMTKSeriesFileNames::New();
-	nameGenarator->SetDirectory(FolderName);
-	using FilenamesContainer = std::vector<std::string>;
-	FilenamesContainer FileNames = nameGenarator->GetInputFileNames();
-	cv::Mat img;
-	cv::Mat dst;
-	using ReaderType = itk::ImageSeriesReader<ImageType>;
-	ReaderType::Pointer reader = ReaderType::New();
-
-	auto filter = IntensityWindowingImageFilterType::New();
-	for (auto var : FileNames)
-	{
-		reader->SetFileName(var);
-		reader->SetImageIO(DicomIO);
-		reader->Update();
-		filter->SetInput(reader->GetOutput());
-		filter->SetWindowMinimum(0);
-		filter->SetWindowMaximum(100);
-		filter->SetWindowLevel(450, 45);
-		filter->SetOutputMinimum(0);
-		filter->SetOutputMaximum(255);
-		filter->Update();
-		img = itk::OpenCVImageBridge::ITKImageToCVMat<ImageType>(filter->GetOutput());
-		img.convertTo(dst, CV_8U);
-		Images.push_back(dst);
-	}
 }
 
 extern "C" __declspec(dllexport) void ITKFileNames(std::string & FolderName, std::vector<std::string>& FileNames)
