@@ -1,5 +1,4 @@
-﻿#include "pch.h"
-#include "itkImageSeriesReader.h"
+﻿#include "itkImageSeriesReader.h"
 #include "itkScalarToRGBPixelFunctor.h"
 #include "itkMetaDataDictionary.h"
 #include "itkMetaDataObject.h"
