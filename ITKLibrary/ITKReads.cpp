@@ -22,8 +22,19 @@
 #include <vector>
 #include <codecvt>
 
+inline void LogInfo(const std::string& msg)
+{
+	std::cerr << "[INFO] " << msg << std::endl;
+}
+
+inline void LogError(const std::string& msg)
+{
+	std::cerr << "[ERROR] " << msg << std::endl;
+}
+
 std::string Utf8ToAnsi(const std::string& utf8Str)
 {
+#ifdef _WIN32
 	if (utf8Str.empty()) return "";
 
 	int wsize = MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, NULL, 0);
@@ -38,6 +49,9 @@ std::string Utf8ToAnsi(const std::string& utf8Str)
 		ansiStr.pop_back();
 
 	return ansiStr;
+#else
+	return utf8Str;
+#endif
 }
 
 struct DcmTagKeyHash {
@@ -208,7 +222,7 @@ bool ReadSeriesWithITK(std::string firstFile, uint8_t** outBuffer, size_t* outSi
 
 		if (targetUID.empty())
 		{
-			OutputDebugStringA("Error: Could not read SeriesInstanceUID from target file.\n");
+			LogError("Could not read SeriesInstanceUID from target file.");
 			return false;
 		}
 
@@ -227,7 +241,7 @@ bool ReadSeriesWithITK(std::string firstFile, uint8_t** outBuffer, size_t* outSi
 		typename ReaderType::FileNamesContainer sortedNames;
 		if (seriesToLoad.empty())
 		{
-			OutputDebugStringA("Warning: Target UID match not found. Loading default input file names.\n");
+			LogInfo("Warning: Target UID match not found. Loading default input file names.");
 			sortedNames = nameGen->GetInputFileNames();
 		}
 		else
@@ -237,7 +251,7 @@ bool ReadSeriesWithITK(std::string firstFile, uint8_t** outBuffer, size_t* outSi
 
 		if (sortedNames.empty())
 		{
-			OutputDebugStringA("No DICOM files found for the selected series.\n");
+			LogError("No DICOM files found for the selected series.");
 			return false;
 		}
 
@@ -281,19 +295,19 @@ bool ReadSeriesWithITK(std::string firstFile, uint8_t** outBuffer, size_t* outSi
 			outInfo->bIsSigned = std::numeric_limits<PixelType>::is_signed;
 		}
 
-		std::string logMsg = "Successfully loaded target series. Slices: " + std::to_string(size[2]) + "\n";
-		OutputDebugStringA(logMsg.c_str());
+		//std::string logMsg = "Successfully loaded target series. Slices: " + std::to_string(size[2]) + "\n";
+		//LogInfo(logMsg.c_str());
 
 		return true;
 	}
 	catch (const itk::ExceptionObject& e)
 	{
-		OutputDebugStringA(("ITK Exception: " + std::string(e.what()) + "\n").c_str());
+		LogError(("ITK Exception: " + std::string(e.what()) + "\n").c_str());
 		return false;
 	}
 	catch (const std::exception& e)
 	{
-		OutputDebugStringA(("Exception: " + std::string(e.what()) + "\n").c_str());
+		LogError(("Exception: " + std::string(e.what()) + "\n").c_str());
 		return false;
 	}
 }
@@ -616,7 +630,7 @@ bool isMultiFrame(DcmDataset* ds)
 			{
 				numberOfFrames = static_cast<Uint32>(card);
 				foundFramesTag = true;
-				//OutputDebugStringA(("Detected Enhanced DICOM frames via PerFrame Sequence: " + std::to_string(numberOfFrames) + "\n").c_str());
+				//LogInfo(("Detected Enhanced DICOM frames via PerFrame Sequence: " + std::to_string(numberOfFrames) + "\n").c_str());
 			}
 		}
 	}
@@ -638,7 +652,7 @@ bool isMultiFrame(DcmDataset* ds)
 					if (card > 1)
 					{
 						numberOfFrames = static_cast<Uint32>(card - 1);
-						//OutputDebugStringA(("Detected Compressed Frames via PixelSequence: " + std::to_string(numberOfFrames) + "\n").c_str());
+						//LogInfo(("Detected Compressed Frames via PixelSequence: " + std::to_string(numberOfFrames) + "\n").c_str());
 					}
 				}
 			}
@@ -663,7 +677,7 @@ bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, siz
 		OFCondition status = dcmFile.loadFile(firstFileAnsi.c_str());
 		if (!status.good())
 		{
-			OutputDebugStringA("Failed to load DICOM file with DCMTK\n");
+			LogError("Failed to load DICOM file with DCMTK\n");
 			return false;
 		}
 
@@ -678,12 +692,12 @@ bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, siz
 	}
 	catch (const itk::ExceptionObject& e)
 	{
-		OutputDebugStringA(("ITK Exception: " + std::string(e.GetDescription()) + "\n").c_str());
+		LogError(("ITK Exception: " + std::string(e.GetDescription()) + "\n").c_str());
 		return false;
 	}
 	catch (const std::exception& e)
 	{
-		OutputDebugStringA(("Exception: " + std::string(e.what()) + "\n").c_str());
+		LogError(("Exception: " + std::string(e.what()) + "\n").c_str());
 		return false;
 	}
 }
