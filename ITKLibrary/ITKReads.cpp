@@ -1,26 +1,19 @@
 ﻿#include "itkImageSeriesReader.h"
-#include "itkScalarToRGBPixelFunctor.h"
 #include "itkMetaDataDictionary.h"
-#include "itkMetaDataObject.h"
 #include "itkNumericTraits.h"
 #include "itkImageIOBase.h"
 #include "itkImageIORegion.h"
-#include "itkDCMTKImageIO.h"
 #include "itkDCMTKSeriesFileNames.h"
 #include "itkDCMTKFileReader.h"
 #include "itkGDCMImageIO.h"
 #include "itkGDCMSeriesFileNames.h"
-#include "gdcmFileDecompressLookupTable.h"
 #include "itkIntensityWindowingImageFilter.h"
-#include "DICOMParser.h"
 #include "dcmtk/dcmdata/dctk.h"
-#include "dcmtk/dcmimgle/dcmimage.h"
 #include <itkOrientImageFilter.h>
 #include <itkSpatialOrientation.h>
 #include <itkCastImageFilter.h>
 
 #include <vector>
-#include <codecvt>
 
 inline void LogInfo(const std::string& msg)
 {
