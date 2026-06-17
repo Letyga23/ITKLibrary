@@ -1,19 +1,33 @@
 ﻿#include "itkImageSeriesReader.h"
-#include "itkMetaDataDictionary.h"
-#include "itkNumericTraits.h"
-#include "itkImageIOBase.h"
-#include "itkImageIORegion.h"
-#include "itkDCMTKSeriesFileNames.h"
-#include "itkDCMTKFileReader.h"
 #include "itkGDCMImageIO.h"
 #include "itkGDCMSeriesFileNames.h"
-#include "itkIntensityWindowingImageFilter.h"
-#include "dcmtk/dcmdata/dctk.h"
 #include <itkOrientImageFilter.h>
 #include <itkSpatialOrientation.h>
 #include <itkCastImageFilter.h>
 
+#include <dcmtk/dcmdata/dcdatset.h>
+#include <dcmtk/dcmdata/dcdeftag.h>
+#include <dcmtk/dcmdata/dcelem.h>
+#include <dcmtk/dcmdata/dcfilefo.h>
+#include <dcmtk/dcmdata/dcitem.h>
+#include <dcmtk/dcmdata/dcpixel.h>
+#include <dcmtk/dcmdata/dcpixseq.h>
+#include <dcmtk/dcmdata/dcsequen.h>
+#include <dcmtk/dcmdata/dctagkey.h>
+
 #include <vector>
+
+#ifdef _WIN32
+#define ITK_API __declspec(dllexport)
+#else
+#define ITK_API
+#endif
+
+#ifdef _WIN32
+#define SCANF sscanf_s
+#else
+#define SCANF sscanf
+#endif
 
 inline void LogInfo(const std::string& msg)
 {
@@ -147,22 +161,6 @@ bool BuildFramesDataDCMTK(DcmDataset* ds, std::vector<FrameDataMapDCMTK>& outFra
 		}
 	}
 	return true;
-}
-
-extern "C" __declspec(dllexport) void ITKFileNames(std::string & FolderName, std::vector<std::string>& FileNames)
-{
-	FileNames.clear();
-	using PixelType = signed short;
-	constexpr unsigned int Dimension = 3; // The dimension is 3, not 2
-
-	using ImageType = itk::Image<PixelType, Dimension>;
-
-	itk::DCMTKSeriesFileNames::Pointer nameGenarator = itk::DCMTKSeriesFileNames::New();
-	nameGenarator->SetDirectory(FolderName);
-	if (nameGenarator.IsNotNull())
-	{
-		FileNames = nameGenarator->GetInputFileNames();
-	}
 }
 
 struct HDVolumeInfo
@@ -520,7 +518,7 @@ bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSiz
 	if (ds->findAndGetOFString(DCM_PixelSpacing, pixelSpacingStr, 0, OFTrue).good() && !pixelSpacingStr.empty())
 	{
 		double valY = 1.0, valX = 1.0;
-		if (sscanf_s(pixelSpacingStr.c_str(), "%lf\\%lf", &valY, &valX) == 2)
+        if (SCANF(pixelSpacingStr.c_str(), "%lf\\%lf", &valY, &valX) == 2)
 		{
 			spacingX = valX;
 			spacingY = valY;
@@ -530,7 +528,7 @@ bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSiz
 	{
 		std::string pSpacing = framesData[0][DCM_PixelSpacing];
 		double valY = 1.0, valX = 1.0;
-		if (sscanf_s(pSpacing.c_str(), "%lf\\%lf", &valY, &valX) == 2)
+        if (SCANF(pSpacing.c_str(), "%lf\\%lf", &valY, &valX) == 2)
 		{
 			spacingX = valX;
 			spacingY = valY;
@@ -552,7 +550,7 @@ bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSiz
 		else if (frames > 1 && framesData.size() > 1 && framesData[0].find(DCM_ImagePositionPatient) != framesData[0].end() && framesData[1].find(DCM_ImagePositionPatient) != framesData[1].end())
 		{
 			double x0, y0, z0, x1, y1, z1;
-			if (sscanf_s(framesData[0][DCM_ImagePositionPatient].c_str(), "%lf\\%lf\\%lf", &x0, &y0, &z0) == 3 && sscanf_s(framesData[1][DCM_ImagePositionPatient].c_str(), "%lf\\%lf\\%lf", &x1, &y1, &z1) == 3)
+            if (SCANF(framesData[0][DCM_ImagePositionPatient].c_str(), "%lf\\%lf\\%lf", &x0, &y0, &z0) == 3 && SCANF(framesData[1][DCM_ImagePositionPatient].c_str(), "%lf\\%lf\\%lf", &x1, &y1, &z1) == 3)
 			{
 				double diff = std::sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0) + (z1 - z0) * (z1 - z0));
 				if (diff > 0.0) spacingZ = diff;
@@ -637,7 +635,7 @@ bool isMultiFrame(DcmDataset* ds)
 			DcmXfer xferSyn(xfer);
 			if (xferSyn.isEncapsulated())
 			{
-				DcmPixelData* pixData = reinterpret_cast<DcmPixelData*>(element);
+                DcmPixelData* pixData = reinterpret_cast<DcmPixelData*>(element);
 				DcmPixelSequence* pixSeq = nullptr;
 				if (pixData->getEncapsulatedRepresentation(xfer, nullptr, pixSeq).good() && pixSeq)
 				{
@@ -655,8 +653,7 @@ bool isMultiFrame(DcmDataset* ds)
 	return numberOfFrames > 1;
 }
 
-extern "C" __declspec(dllexport)
-bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
+ITK_API bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
 	try
 	{
@@ -696,8 +693,7 @@ bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, siz
 }
 
 
-extern "C" __declspec(dllexport)
-void FreeVolumeBuffer(uint8_t * buffer)
+ITK_API void FreeVolumeBuffer(uint8_t * buffer)
 {
 	delete[] buffer;
 }
