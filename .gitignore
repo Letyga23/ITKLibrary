@@ -403,3 +403,5 @@ FodyWeavers.xsd
 out/**
 !out/**/
 !out/**/*.dll
+/build
+/.qtcreator

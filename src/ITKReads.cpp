@@ -18,9 +18,9 @@
 #include <vector>
 
 #ifdef _WIN32
-#define ITK_API __declspec(dllexport)
+#define ITK_API extern "C" __declspec(dllexport)
 #else
-#define ITK_API
+#define ITK_API extern "C"
 #endif
 
 #ifdef _WIN32
@@ -31,12 +31,12 @@
 
 inline void LogInfo(const std::string& msg)
 {
-	std::cerr << "[INFO] " << msg << std::endl;
+    std::cerr << "[INFO] " << msg << std::endl;
 }
 
 inline void LogError(const std::string& msg)
 {
-	std::cerr << "[ERROR] " << msg << std::endl;
+    std::cerr << "[ERROR] " << msg << std::endl;
 }
 
 std::string Utf8ToAnsi(const std::string& utf8Str)
@@ -660,20 +660,23 @@ ITK_API bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuf
 		if (firstFilePath == nullptr)
 			return false;
 
-		std::string firstFile = firstFilePath;
+        std::string firstFile = firstFilePath;
 		std::string firstFileAnsi = Utf8ToAnsi(firstFile);
 
 		DcmFileFormat dcmFile;
 		OFCondition status = dcmFile.loadFile(firstFileAnsi.c_str());
 		if (!status.good())
 		{
-			LogError("Failed to load DICOM file with DCMTK\n");
+            LogError("Failed to load DICOM file with DCMTK");
 			return false;
 		}
 
 		DcmDataset* ds = dcmFile.getDataset();
 		if (!ds)
-			return false;
+        {
+            LogError("Failed to load DcmDataset");
+            return false;
+        }
 
 		if (isMultiFrame(ds))
 			return ReadMultiFrameWithDCMTK(ds, outBuffer, outSize, outInfo);
@@ -682,12 +685,12 @@ ITK_API bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuf
 	}
 	catch (const itk::ExceptionObject& e)
 	{
-		LogError(("ITK Exception: " + std::string(e.GetDescription()) + "\n").c_str());
+        LogError(("ITK Exception: " + std::string(e.GetDescription())).c_str());
 		return false;
 	}
 	catch (const std::exception& e)
 	{
-		LogError(("Exception: " + std::string(e.what()) + "\n").c_str());
+        LogError(("Exception: " + std::string(e.what())).c_str());
 		return false;
 	}
 }
