@@ -20,10 +20,6 @@ add_library(${PROJECT_NAME} SHARED
     ${HEADERS}
 )
 
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    BUILD_RPATH "$ORIGIN:$ORIGIN"
-    INSTALL_RPATH "$ORIGIN:$ORIGIN"
-)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/src
@@ -69,6 +65,11 @@ if(WIN32)
 # LINUX
 # =========================
 elseif(UNIX)
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    BUILD_RPATH "$ORIGIN:$ORIGIN"
+    INSTALL_RPATH "$ORIGIN:$ORIGIN"
+)
 
     find_package(DCMTK REQUIRED CONFIG)
     find_package(ITK REQUIRED CONFIG)
