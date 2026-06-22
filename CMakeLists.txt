@@ -63,9 +63,6 @@ if(WIN32)
         iphlpapi
     )
 
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output"
-    )
 
 # =========================
 # LINUX
@@ -83,3 +80,7 @@ elseif(UNIX)
         pthread
     )
 endif()
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output"
+)
