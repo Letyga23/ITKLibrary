@@ -400,8 +400,14 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
-out/**
-!out/**/
-!out/**/*.dll
-/build
 /.qtcreator
+/build/*
+!/build/*/
+/build/*/*
+!/build/*/output/
+!/build/*/output/**
+/out/*
+!/out/*/
+/out/*/*
+!/out/*/output/
+!/out/*/output/**
