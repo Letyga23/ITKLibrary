@@ -20,7 +20,6 @@ add_library(${PROJECT_NAME} SHARED
     ${HEADERS}
 )
 
-
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/src
 )
@@ -67,8 +66,8 @@ if(WIN32)
 elseif(UNIX)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-    BUILD_RPATH "$ORIGIN:$ORIGIN"
-    INSTALL_RPATH "$ORIGIN:$ORIGIN"
+    BUILD_RPATH "$ORIGIN/ITKLibrary_Run"
+    INSTALL_RPATH "$ORIGIN/ITKLibrary_Run"
 )
 
     find_package(DCMTK REQUIRED CONFIG)
