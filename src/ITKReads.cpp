@@ -1,4 +1,8 @@
-﻿#include "itkImageSeriesReader.h"
+﻿#include <string>
+#include <vector>
+#include <unordered_map>
+
+#include "itkImageSeriesReader.h"
 #include "itkGDCMImageIO.h"
 #include "itkGDCMSeriesFileNames.h"
 #include <itkOrientImageFilter.h>
@@ -14,8 +18,6 @@
 #include <dcmtk/dcmdata/dcpixseq.h>
 #include <dcmtk/dcmdata/dcsequen.h>
 #include <dcmtk/dcmdata/dctagkey.h>
-
-#include <vector>
 
 #ifdef _WIN32
 #define ITK_API extern "C" __declspec(dllexport)
@@ -267,10 +269,16 @@ bool ReadSeriesWithITK(std::string firstFile, uint8_t** outBuffer, size_t* outSi
 		const size_t voxelCount = static_cast<size_t>(size[0]) * size[1] * size[2];
 		const size_t totalBytes = voxelCount * sizeof(PixelType);
 
-		*outBuffer = new uint8_t[totalBytes];
-		*outSize = totalBytes;
+        *outBuffer = static_cast<uint8_t*>(malloc(totalBytes));
 
-		memcpy(*outBuffer, image->GetBufferPointer(), totalBytes);
+        if (!*outBuffer)
+        {
+            *outSize = 0;
+            return false;
+        }
+        memcpy(*outBuffer, image->GetBufferPointer(), totalBytes);
+
+        *outSize = totalBytes;
 
 		if (outInfo)
 		{
@@ -458,9 +466,15 @@ bool ReadSeriesWithITK( const std::string& firstFile, uint8_t** outBuffer, size_
 		const size_t voxelCount = static_cast<size_t>(size[0]) * size[1] * size[2];
 		const size_t totalBytes = voxelCount *sizeof(OutputPixelType);
 
-		*outBuffer = new uint8_t[totalBytes];
+        *outBuffer = static_cast<uint8_t*>(malloc(totalBytes));
 
+        if (!*outBuffer)
+        {
+            *outSize = 0;
+            return false;
+        }
 		memcpy(*outBuffer, image->GetBufferPointer(), totalBytes);
+
 		*outSize = totalBytes;
 
 		if (outInfo)
@@ -489,168 +503,168 @@ bool ReadSeriesWithITK( const std::string& firstFile, uint8_t** outBuffer, size_
 
 bool ReadMultiFrameWithDCMTK(DcmDataset* ds, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
 {
-	Uint16 rows = 0, cols = 0, bitsAllocated = 0, pixelRep = 0;
-	Uint32 frames = 1;
+    Uint16 rows = 0, cols = 0, bitsAllocated = 0, pixelRep = 0;
+    Uint32 frames = 1;
 
-	ds->findAndGetUint16(DCM_Rows, rows, 0, OFTrue);
-	ds->findAndGetUint16(DCM_Columns, cols, 0, OFTrue);
-	ds->findAndGetUint16(DCM_BitsAllocated, bitsAllocated, 0, OFTrue);
-	ds->findAndGetUint16(DCM_PixelRepresentation, pixelRep, 0, OFTrue);
+    ds->findAndGetUint16(DCM_Rows, rows, 0, OFTrue);
+    ds->findAndGetUint16(DCM_Columns, cols, 0, OFTrue);
+    ds->findAndGetUint16(DCM_BitsAllocated, bitsAllocated, 0, OFTrue);
+    ds->findAndGetUint16(DCM_PixelRepresentation, pixelRep, 0, OFTrue);
 
-	if (!FindTagRecursiveUint32(ds, DCM_NumberOfFrames, frames) || frames <= 1)
-	{
-		DcmTagKey perFrameTag(0x5200, 0x9230);
-		DcmElement* element = nullptr;
-		if (ds->findAndGetElement(perFrameTag, element).good() && element && element->ident() == EVR_SQ)
-			frames = static_cast<Uint32>(reinterpret_cast<DcmSequenceOfItems*>(element)->card());
-	}
+    if (!FindTagRecursiveUint32(ds, DCM_NumberOfFrames, frames) || frames <= 1)
+    {
+        DcmTagKey perFrameTag(0x5200, 0x9230);
+        DcmElement* element = nullptr;
+        if (ds->findAndGetElement(perFrameTag, element).good() && element && element->ident() == EVR_SQ)
+            frames = static_cast<Uint32>(reinterpret_cast<DcmSequenceOfItems*>(element)->card());
+    }
 
-	if (rows == 0 || cols == 0 || frames == 0)
-		return false;
+    if (rows == 0 || cols == 0 || frames == 0)
+        return false;
 
-	std::vector<FrameDataMapDCMTK> framesData;
-	bool hasPerFrameData = BuildFramesDataDCMTK(ds, framesData) && !framesData.empty();
+    std::vector<FrameDataMapDCMTK> framesData;
+    bool hasPerFrameData = BuildFramesDataDCMTK(ds, framesData) && !framesData.empty();
 
-	double spacingX = 1.0;
-	double spacingY = 1.0;
-	OFString pixelSpacingStr;
+    double spacingX = 1.0;
+    double spacingY = 1.0;
+    OFString pixelSpacingStr;
 
-	if (ds->findAndGetOFString(DCM_PixelSpacing, pixelSpacingStr, 0, OFTrue).good() && !pixelSpacingStr.empty())
-	{
-		double valY = 1.0, valX = 1.0;
+    if (ds->findAndGetOFString(DCM_PixelSpacing, pixelSpacingStr, 0, OFTrue).good() && !pixelSpacingStr.empty())
+    {
+        double valY = 1.0, valX = 1.0;
         if (SCANF(pixelSpacingStr.c_str(), "%lf\\%lf", &valY, &valX) == 2)
-		{
-			spacingX = valX;
-			spacingY = valY;
-		}
-	}
-	else if (hasPerFrameData && framesData[0].find(DCM_PixelSpacing) != framesData[0].end())
-	{
-		std::string pSpacing = framesData[0][DCM_PixelSpacing];
-		double valY = 1.0, valX = 1.0;
+        {
+            spacingX = valX;
+            spacingY = valY;
+        }
+    }
+    else if (hasPerFrameData && framesData[0].find(DCM_PixelSpacing) != framesData[0].end())
+    {
+        std::string pSpacing = framesData[0][DCM_PixelSpacing];
+        double valY = 1.0, valX = 1.0;
         if (SCANF(pSpacing.c_str(), "%lf\\%lf", &valY, &valX) == 2)
-		{
-			spacingX = valX;
-			spacingY = valY;
-		}
-	}
+        {
+            spacingX = valX;
+            spacingY = valY;
+        }
+    }
 
-	double spacingZ = 1.0;
-	double spacingBetweenSlices = 0.0;
-	double sliceThickness = 0.0;
+    double spacingZ = 1.0;
+    double spacingBetweenSlices = 0.0;
+    double sliceThickness = 0.0;
 
-	if (ds->findAndGetFloat64(DCM_SpacingBetweenSlices, spacingBetweenSlices, 0, OFTrue).good() && spacingBetweenSlices > 0.0)
-		spacingZ = spacingBetweenSlices;
-	else if (ds->findAndGetFloat64(DCM_SliceThickness, sliceThickness, 0, OFTrue).good() && sliceThickness > 0.0)
-		spacingZ = sliceThickness;
-	else if (hasPerFrameData)
-	{
-		if (framesData[0].find(DCM_SliceThickness) != framesData[0].end() && !framesData[0][DCM_SliceThickness].empty())
-			spacingZ = std::stod(framesData[0][DCM_SliceThickness]);
-		else if (frames > 1 && framesData.size() > 1 && framesData[0].find(DCM_ImagePositionPatient) != framesData[0].end() && framesData[1].find(DCM_ImagePositionPatient) != framesData[1].end())
-		{
-			double x0, y0, z0, x1, y1, z1;
+    if (ds->findAndGetFloat64(DCM_SpacingBetweenSlices, spacingBetweenSlices, 0, OFTrue).good() && spacingBetweenSlices > 0.0)
+        spacingZ = spacingBetweenSlices;
+    else if (ds->findAndGetFloat64(DCM_SliceThickness, sliceThickness, 0, OFTrue).good() && sliceThickness > 0.0)
+        spacingZ = sliceThickness;
+    else if (hasPerFrameData)
+    {
+        if (framesData[0].find(DCM_SliceThickness) != framesData[0].end() && !framesData[0][DCM_SliceThickness].empty())
+            spacingZ = std::stod(framesData[0][DCM_SliceThickness]);
+        else if (frames > 1 && framesData.size() > 1 && framesData[0].find(DCM_ImagePositionPatient) != framesData[0].end() && framesData[1].find(DCM_ImagePositionPatient) != framesData[1].end())
+        {
+            double x0, y0, z0, x1, y1, z1;
             if (SCANF(framesData[0][DCM_ImagePositionPatient].c_str(), "%lf\\%lf\\%lf", &x0, &y0, &z0) == 3 && SCANF(framesData[1][DCM_ImagePositionPatient].c_str(), "%lf\\%lf\\%lf", &x1, &y1, &z1) == 3)
-			{
-				double diff = std::sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0) + (z1 - z0) * (z1 - z0));
-				if (diff > 0.0) spacingZ = diff;
-			}
-		}
-	}
+            {
+                double diff = std::sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0) + (z1 - z0) * (z1 - z0));
+                if (diff > 0.0) spacingZ = diff;
+            }
+        }
+    }
 
-	double slope = 1.0, intercept = 0.0;
-	if (!ds->findAndGetFloat64(DCM_RescaleSlope, slope, 0, OFTrue).good())
-	{
-		if (hasPerFrameData && framesData[0].find(DCM_RescaleSlope) != framesData[0].end() && !framesData[0][DCM_RescaleSlope].empty())
-			slope = std::stod(framesData[0][DCM_RescaleSlope]);
-	}
-	if (!ds->findAndGetFloat64(DCM_RescaleIntercept, intercept, 0, OFTrue).good())
-	{
-		if (hasPerFrameData && framesData[0].find(DCM_RescaleIntercept) != framesData[0].end() && !framesData[0][DCM_RescaleIntercept].empty())
-			intercept = std::stod(framesData[0][DCM_RescaleIntercept]);
-	}
+    double slope = 1.0, intercept = 0.0;
+    if (!ds->findAndGetFloat64(DCM_RescaleSlope, slope, 0, OFTrue).good())
+    {
+        if (hasPerFrameData && framesData[0].find(DCM_RescaleSlope) != framesData[0].end() && !framesData[0][DCM_RescaleSlope].empty())
+            slope = std::stod(framesData[0][DCM_RescaleSlope]);
+    }
+    if (!ds->findAndGetFloat64(DCM_RescaleIntercept, intercept, 0, OFTrue).good())
+    {
+        if (hasPerFrameData && framesData[0].find(DCM_RescaleIntercept) != framesData[0].end() && !framesData[0][DCM_RescaleIntercept].empty())
+            intercept = std::stod(framesData[0][DCM_RescaleIntercept]);
+    }
 
-	const Uint16* pixelData = nullptr;
-	if (!ds->findAndGetUint16Array(DCM_PixelData, pixelData).good() || !pixelData)
-		return false;
+    const Uint16* pixelData = nullptr;
+    if (!ds->findAndGetUint16Array(DCM_PixelData, pixelData).good() || !pixelData)
+        return false;
 
-	const size_t voxelCount = static_cast<size_t>(cols) * rows * frames;
-	const size_t totalBytes = voxelCount * sizeof(float);
+    const size_t voxelCount = static_cast<size_t>(cols) * rows * frames;
+    const size_t totalBytes = voxelCount * sizeof(float);
 
-	*outBuffer = new uint8_t[totalBytes];
-	*outSize = totalBytes;
+    *outBuffer = new uint8_t[totalBytes];
+    *outSize = totalBytes;
 
-	float* dest = reinterpret_cast<float*>(*outBuffer);
+    float* dest = reinterpret_cast<float*>(*outBuffer);
 
-	for (size_t i = 0; i < voxelCount; ++i)
-	{
-		double val = (pixelRep == 0) ? static_cast<double>(pixelData[i]) : static_cast<double>(reinterpret_cast<const int16_t*>(pixelData)[i]);
-		dest[i] = static_cast<float>(val * slope + intercept);
-	}
+    for (size_t i = 0; i < voxelCount; ++i)
+    {
+        double val = (pixelRep == 0) ? static_cast<double>(pixelData[i]) : static_cast<double>(reinterpret_cast<const int16_t*>(pixelData)[i]);
+        dest[i] = static_cast<float>(val * slope + intercept);
+    }
 
-	if (outInfo)
-	{
-		outInfo->DimX = cols;
-		outInfo->DimY = rows;
-		outInfo->DimZ = frames;
-		outInfo->SpacingX = static_cast<float>(spacingX);
-		outInfo->SpacingY = static_cast<float>(spacingY);
-		outInfo->SpacingZ = static_cast<float>(spacingZ);
-		outInfo->BytesPerVoxel = sizeof(float);
-		outInfo->bIsSigned = true;
-	}
+    if (outInfo)
+    {
+        outInfo->DimX = cols;
+        outInfo->DimY = rows;
+        outInfo->DimZ = frames;
+        outInfo->SpacingX = static_cast<float>(spacingX);
+        outInfo->SpacingY = static_cast<float>(spacingY);
+        outInfo->SpacingZ = static_cast<float>(spacingZ);
+        outInfo->BytesPerVoxel = sizeof(float);
+        outInfo->bIsSigned = true;
+    }
 
-	return true;
+    return true;
 }
 
 bool isMultiFrame(DcmDataset* ds)
 {
-	Uint32 numberOfFrames = 1;
+    Uint32 numberOfFrames = 1;
 
-	bool foundFramesTag = FindTagRecursiveUint32(ds, DCM_NumberOfFrames, numberOfFrames);
+    bool foundFramesTag = FindTagRecursiveUint32(ds, DCM_NumberOfFrames, numberOfFrames);
 
-	if (!foundFramesTag || numberOfFrames <= 1)
-	{
-		DcmTagKey perFrameTag(0x5200, 0x9230);
-		DcmElement* element = nullptr;
-		if (ds->findAndGetElement(perFrameTag, element).good() && element && element->ident() == EVR_SQ)
-		{
-			DcmSequenceOfItems* perSeq = reinterpret_cast<DcmSequenceOfItems*>(element);
-			unsigned long card = perSeq->card();
-			if (card > 1)
-			{
-				numberOfFrames = static_cast<Uint32>(card);
-				foundFramesTag = true;
-				//LogInfo(("Detected Enhanced DICOM frames via PerFrame Sequence: " + std::to_string(numberOfFrames) + "\n").c_str());
-			}
-		}
-	}
+    if (!foundFramesTag || numberOfFrames <= 1)
+    {
+        DcmTagKey perFrameTag(0x5200, 0x9230);
+        DcmElement* element = nullptr;
+        if (ds->findAndGetElement(perFrameTag, element).good() && element && element->ident() == EVR_SQ)
+        {
+            DcmSequenceOfItems* perSeq = reinterpret_cast<DcmSequenceOfItems*>(element);
+            unsigned long card = perSeq->card();
+            if (card > 1)
+            {
+                numberOfFrames = static_cast<Uint32>(card);
+                foundFramesTag = true;
+                //LogInfo(("Detected Enhanced DICOM frames via PerFrame Sequence: " + std::to_string(numberOfFrames) + "\n").c_str());
+            }
+        }
+    }
 
-	if (!foundFramesTag || numberOfFrames <= 1)
-	{
-		DcmElement* element = nullptr;
-		if (ds->findAndGetElement(DCM_PixelData, element).good() && element)
-		{
-			E_TransferSyntax xfer = ds->getCurrentXfer();
-			DcmXfer xferSyn(xfer);
-			if (xferSyn.isEncapsulated())
-			{
+    if (!foundFramesTag || numberOfFrames <= 1)
+    {
+        DcmElement* element = nullptr;
+        if (ds->findAndGetElement(DCM_PixelData, element).good() && element)
+        {
+            E_TransferSyntax xfer = ds->getCurrentXfer();
+            DcmXfer xferSyn(xfer);
+            if (xferSyn.isEncapsulated())
+            {
                 DcmPixelData* pixData = reinterpret_cast<DcmPixelData*>(element);
-				DcmPixelSequence* pixSeq = nullptr;
-				if (pixData->getEncapsulatedRepresentation(xfer, nullptr, pixSeq).good() && pixSeq)
-				{
-					unsigned long card = pixSeq->card();
-					if (card > 1)
-					{
-						numberOfFrames = static_cast<Uint32>(card - 1);
-						//LogInfo(("Detected Compressed Frames via PixelSequence: " + std::to_string(numberOfFrames) + "\n").c_str());
-					}
-				}
-			}
-		}
-	}
+                DcmPixelSequence* pixSeq = nullptr;
+                if (pixData->getEncapsulatedRepresentation(xfer, nullptr, pixSeq).good() && pixSeq)
+                {
+                    unsigned long card = pixSeq->card();
+                    if (card > 1)
+                    {
+                        numberOfFrames = static_cast<Uint32>(card - 1);
+                        //LogInfo(("Detected Compressed Frames via PixelSequence: " + std::to_string(numberOfFrames) + "\n").c_str());
+                    }
+                }
+            }
+        }
+    }
 
-	return numberOfFrames > 1;
+    return numberOfFrames > 1;
 }
 
 ITK_API bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuffer, size_t* outSize, HDVolumeInfo* outInfo)
@@ -696,7 +710,10 @@ ITK_API bool ReadDicomSeriesToVolume(const char* firstFilePath, uint8_t** outBuf
 }
 
 
-ITK_API void FreeVolumeBuffer(uint8_t * buffer)
+ITK_API void FreeVolumeBuffer(uint8_t* buffer)
 {
-	delete[] buffer;
+    if (buffer)
+    {
+        free(buffer);
+    }
 }
